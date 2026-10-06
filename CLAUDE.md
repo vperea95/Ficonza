@@ -59,4 +59,4 @@ plataforma/android/  AndroidManifest.xml (label "Ficonza") y MainActivity.kt (Fl
 
 ## Estado actual
 
-- v0.1.0: base del proyecto (ícono, arranque, idioma, apariencia, pantalla provisional). Sin repositorio en GitHub todavía; esperando que el usuario lo cree y defina los módulos.
+- v0.1.0: base del proyecto (ícono, arranque, idioma, apariencia, pantalla provisional). Repositorio: https://github.com/vperea95/Ficonza (rama `main`). Esperando que el usuario defina los módulos.
