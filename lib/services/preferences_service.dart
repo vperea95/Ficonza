@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../utils/money.dart';
+
 /// Preferencias del usuario guardadas en el dispositivo.
 class PreferencesService extends ChangeNotifier {
   static const _themeKey = 'theme_mode';
   static const _languageKey = 'language';
+  static const _currencyKey = 'currency';
 
   SharedPreferences? _prefs;
   ThemeMode _themeMode = ThemeMode.system;
@@ -19,6 +22,10 @@ class PreferencesService extends ChangeNotifier {
       orElse: () => ThemeMode.system,
     );
     _language = _prefs!.getString(_languageKey);
+    Money.currency = Currency.values.firstWhere(
+      (c) => c.name == _prefs!.getString(_currencyKey),
+      orElse: () => Currency.cop,
+    );
     notifyListeners();
   }
 
@@ -47,5 +54,15 @@ class PreferencesService extends ChangeNotifier {
     } else {
       await _prefs?.setString(_languageKey, code);
     }
+  }
+
+  // ---------- Moneda ----------
+
+  Currency get currency => Money.currency;
+
+  Future<void> setCurrency(Currency value) async {
+    Money.currency = value;
+    notifyListeners();
+    await _prefs?.setString(_currencyKey, value.name);
   }
 }

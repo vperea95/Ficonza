@@ -1,7 +1,7 @@
 name: ficonza
 description: Ficonza - finanzas personales.
 publish_to: 'none'
-version: 0.1.0+1
+version: 0.2.0+2
 
 environment:
   sdk: ^3.6.0
@@ -12,6 +12,14 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   shared_preferences: ^2.5.6
+  sqflite: ^2.4.2
+  path: ^1.9.0
+  path_provider: ^2.1.5
+  # Versión que fije flutter_localizations.
+  intl: any
+  # Para escribir el .xlsx a mano (la misma versión que usa flutter_launcher_icons).
+  archive: ^4.0.0
+  share_plus: ^13.0.0
 
 dev_dependencies:
   flutter_test:
