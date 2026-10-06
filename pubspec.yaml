@@ -1,0 +1,49 @@
+name: ficonza
+description: Ficonza - finanzas personales.
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  shared_preferences: ^2.5.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.8
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/icon/logo.png
+    - assets/icon/logo_full.png
+
+# Ícono de la app. El workflow ejecuta: dart run flutter_launcher_icons
+# En Android 8+ es un ícono adaptable (símbolo F + barras sobre el fondo) que cada marca recorta a su forma.
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: assets/icon/app_icon.png
+  adaptive_icon_background: assets/icon/background.png
+  adaptive_icon_foreground: assets/icon/foreground.png
+  min_sdk_android: 24
+
+# Pantalla de arranque. Android 12+ solo permite un ícono redondo: ahí va el símbolo;
+# antes, el logo completo con "Ficonza".
+flutter_native_splash:
+  color: "#0B1530"
+  image: assets/icon/logo_full.png
+  android_12:
+    color: "#0B1530"
+    image: assets/icon/foreground.png
+    icon_background_color: "#0B1530"
+  ios: false
+  web: false

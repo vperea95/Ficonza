@@ -1,0 +1,73 @@
+name: Compilar APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+
+      - name: Instalar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Instalar Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generar carpeta android
+        run: |
+          flutter create --org com.ficonza --project-name ficonza --platforms=android .
+          rm -rf test
+
+      - name: Configurar Android
+        run: |
+          cp plataforma/android/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+          MAIN=$(find android/app/src/main -name MainActivity.kt)
+          PKG=$(head -1 "$MAIN")
+          { echo "$PKG"; tail -n +2 plataforma/android/MainActivity.kt; } > "$MAIN"
+          sed -i -E 's/^(\s*)minSdk(Version)?\b.*$/\1minSdk = 24/' android/app/build.gradle.kts
+          grep -n "minSdk" android/app/build.gradle.kts
+
+      - name: Instalar dependencias
+        run: flutter pub get || flutter pub upgrade --major-versions
+
+      - name: Generar ícono y pantalla de arranque
+        run: |
+          dart run flutter_launcher_icons
+          dart run flutter_native_splash:create
+
+      - name: Compilar APK
+        run: |
+          set -o pipefail
+          flutter build apk --release --split-per-abi --target-platform android-arm,android-arm64 2>&1 | tee build.log
+
+      # Si falla, publica los errores como anotaciones (se ven en el resumen sin iniciar sesión).
+      - name: Mostrar errores
+        if: failure()
+        run: |
+          touch build.log
+          grep -E "Error:|error:|^e: |What went wrong|FAILURE|Exception" -A4 build.log | head -80 > errores.txt || true
+          split -l 16 errores.txt parte_
+          for f in parte_*; do
+            [ -f "$f" ] || continue
+            msg=$(tr -d '\r' < "$f" | awk 'BEGIN{ORS="%0A"} {gsub(/%/,"%25"); print}')
+            echo "::error title=Error de compilación::$msg"
+          done
+
+      - name: Publicar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ficonza-apk
+          path: |
+            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
