@@ -90,7 +90,7 @@ class _EntryEditorState extends State<_EntryEditor> {
           children: [
             Row(
               children: [
-                Icon(module.icon, color: module.color),
+                Icon(module.icon, color: Theme.of(context).colorScheme.primary),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -159,7 +159,7 @@ class _EntryEditorState extends State<_EntryEditor> {
             ),
             const SizedBox(height: 20),
             FilledButton(
-              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52), backgroundColor: module.color),
+              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
               onPressed: _save,
               child: Text(s.save),
             ),

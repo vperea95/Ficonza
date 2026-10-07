@@ -8,13 +8,21 @@ class AppColors {
   static const night = Color(0xFF0B1530);
   static const gradient = LinearGradient(colors: [blue, cyan]);
   static const growth = LinearGradient(colors: [cyan, mint]);
+
+  /// Tarjetas grandes (lo que sobra, total ahorrado): siempre el mismo degradado de la marca.
+  static const brandGradient = LinearGradient(
+    colors: [blue, Color(0xFF2F86FF)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
 }
 
 ThemeData buildTheme(Brightness brightness) {
   final dark = brightness == Brightness.dark;
   final scheme = ColorScheme.fromSeed(seedColor: AppColors.blue, brightness: brightness).copyWith(
     primary: dark ? const Color(0xFF6FA0FF) : AppColors.blue,
-    secondary: dark ? AppColors.mint : const Color(0xFF00A88A),
+    // Mismo azul en secundario: chips, interruptores y demás no se ven de otro color.
+    secondary: dark ? const Color(0xFF6FA0FF) : AppColors.blue,
     tertiary: AppColors.cyan,
     surface: dark ? const Color(0xFF0E1A38) : null,
   );
@@ -22,9 +30,16 @@ ThemeData buildTheme(Brightness brightness) {
     useMaterial3: true,
     colorScheme: scheme,
     scaffoldBackgroundColor: dark ? AppColors.night : null,
-    appBarTheme: AppBarTheme(
+    // Color uniforme en toda la app: barras y botones flotantes con el azul de la marca.
+    // Los colores mezclados quedan solo para los reportes (pantalla de reporte y Excel).
+    appBarTheme: const AppBarTheme(
       centerTitle: false,
-      backgroundColor: dark ? AppColors.night : null,
+      backgroundColor: AppColors.blue,
+      foregroundColor: Colors.white,
+    ),
+    floatingActionButtonTheme: const FloatingActionButtonThemeData(
+      backgroundColor: AppColors.blue,
+      foregroundColor: Colors.white,
     ),
   );
 }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n/strings.dart';
 import '../models/finance.dart';
+import '../theme.dart';
 import '../services/export_service.dart';
 import '../services/finance_store.dart';
 import '../utils/money.dart';
@@ -110,7 +111,7 @@ class _ExportScreenState extends State<ExportScreen> {
     );
     if (ok != true) return;
     await _run(() async {
-      await widget.store.restore(backup.months, backup.entries);
+      await widget.store.restore(backup.months, backup.entries, backup.funds);
       _snack(s.restored);
     });
   }
@@ -132,7 +133,7 @@ class _ExportScreenState extends State<ExportScreen> {
             // ----- Excel -----
             _SectionCard(
               icon: Icons.grid_on_rounded,
-              color: const Color(0xFF1D6F42),
+              color: AppColors.blue,
               title: s.excelTitle,
               body: s.excelHint,
               children: [
@@ -171,7 +172,7 @@ class _ExportScreenState extends State<ExportScreen> {
             // ----- Copia de seguridad -----
             _SectionCard(
               icon: Icons.backup_rounded,
-              color: const Color(0xFF1F6BFF),
+              color: AppColors.blue,
               title: s.backupTitle,
               body: s.backupHint,
               children: [

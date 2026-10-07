@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n/strings.dart';
 import '../models/finance.dart';
+import '../theme.dart';
 import '../utils/money.dart';
 
 /// "Resumen final" de un mes, como en la hoja: ingresos netos menos gastos = lo que sobra.
@@ -14,22 +15,27 @@ class SummaryTable extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = S.of(context);
     final m = summary;
-    final balanceColor = m.balance < 0 ? const Color(0xFFC62828) : const Color(0xFF2E7D32);
+    final primary = Theme.of(context).colorScheme.primary;
+    final balanceColor = AppColors.blue;
     return Card(
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            color: summaryColor,
+            color: AppColors.blue,
             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
             child: Text(s.finalSummary.toUpperCase(),
                 textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
           ),
           _row(s.moduleIncome, m.income),
           _row('(+) ${s.moduleOccasional}', m.occasional),
-          _row('(−) ${s.totalDeductions}', m.totalDeductions),
-          _row(s.netIncome, m.netIncome, bold: true, tint: const Color(0x33A5D6A7)),
+          if (m.withdrawals != 0) _row('(+) ${s.savingsWithdrawals}', m.withdrawals),
+          _row('(−) ${s.healthPension(_pct(m.healthPercent))}', m.health),
+          if (m.otherDeductions != 0) _row('(−) ${s.otherDeductions}', m.otherDeductions),
+          _row('(−) ${s.savingsFromSalary}', m.savingsFromSalary),
+          if (m.savingsVoluntary != 0) _row('(−) ${s.savingsVoluntary}', m.savingsVoluntary),
+          _row(s.netIncome, m.netIncome, bold: true, tint: primary.withValues(alpha: 0.12)),
           _row('(−) ${s.moduleFixed}', m.fixed),
           _row('(−) ${s.moduleVariable}', m.variable),
           Container(
@@ -51,6 +57,8 @@ class SummaryTable extends StatelessWidget {
     );
   }
 
+  static String _pct(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
+
   Widget _row(String label, double value, {bool bold = false, Color? tint}) {
     final style = TextStyle(fontWeight: bold ? FontWeight.w800 : FontWeight.w500);
     return Container(
@@ -68,10 +76,13 @@ class SummaryTable extends StatelessWidget {
 
 /// "< Octubre 2026 >": cambia de mes; tocar el nombre abre un selector.
 class MonthSelector extends StatelessWidget {
-  const MonthSelector({super.key, required this.month, required this.onChanged});
+  const MonthSelector({super.key, required this.month, required this.onChanged, this.color});
 
   final String month;
   final ValueChanged<String> onChanged;
+
+  /// Color del texto y las flechas (blanco sobre la barra de color de un módulo).
+  final Color? color;
 
   Future<void> _pick(BuildContext context) async {
     final s = S.of(context);
@@ -119,6 +130,7 @@ class MonthSelector extends StatelessWidget {
     return Row(
       children: [
         IconButton(
+          color: color,
           tooltip: s.previousMonth,
           onPressed: () => onChanged(MonthId.add(month, -1)),
           icon: const Icon(Icons.chevron_left_rounded),
@@ -128,11 +140,12 @@ class MonthSelector extends StatelessWidget {
             onPressed: () => _pick(context),
             child: Text(
               s.monthLabel(month),
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800, color: color),
             ),
           ),
         ),
         IconButton(
+          color: color,
           tooltip: s.nextMonth,
           onPressed: () => onChanged(MonthId.add(month, 1)),
           icon: const Icon(Icons.chevron_right_rounded),

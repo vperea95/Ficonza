@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'l10n/strings.dart';
-import 'screens/home_screen.dart';
+import 'screens/shell_screen.dart';
 import 'services/finance_db.dart';
 import 'services/finance_store.dart';
 import 'services/preferences_service.dart';
@@ -51,7 +51,7 @@ class FiconzaApp extends StatelessWidget {
           GlobalWidgetsLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
         ],
-        home: HomeScreen(preferences: preferences, store: store),
+        home: ShellScreen(preferences: preferences, store: store),
       ),
     );
   }

@@ -1,6 +1,6 @@
 # Ficonza — contexto del proyecto
 
-App móvil en Flutter **Ficonza**: presupuesto mensual personal. Pasa a la app la hoja de cálculo del usuario (Ingresos, Ingresos ocasionales, Gastos fijos, Gastos variables, Deducciones sobre ingresos y Resumen final): **cada tabla es un módulo**. Datos en SQLite en el dispositivo, con exportación a Excel, copia de seguridad JSON y reporte consolidado. Solo Android.
+App móvil en Flutter **Ficonza**: presupuesto mensual personal. Pasa a la app la hoja de cálculo del usuario (Ingresos, Ingresos ocasionales, Gastos fijos, Gastos variables, Deducciones sobre ingresos y Resumen final) más un módulo de **Ahorros que se acumulan**: **cada tabla es un módulo con su propia pantalla** (el usuario no quiere todo en una sola página). Datos en SQLite en el dispositivo, con exportación a Excel, copia de seguridad JSON y reporte consolidado. Solo Android.
 
 Se construye con la misma forma de trabajo que Vixago Player (`C:\Users\ANDRES\Documents\proyectos de apps\Vixago Player`), DownPlayer y Radio Colombia. Revisar sus `CLAUDE.md` para reutilizar patrones (idioma, apariencia, íconos, MethodChannel, audio en segundo plano, etc.).
 
@@ -40,49 +40,62 @@ El APK se firma con la llave debug de cada compilación: hay que desinstalar la 
 
 ```
 lib/
-  main.dart                          Abre la base de datos (store.load) antes de runApp; MaterialApp en ListenableBuilder(preferences)
+  main.dart                          Abre la base de datos (store.load) antes de runApp; MaterialApp en ListenableBuilder(preferences); home = ShellScreen
   theme.dart                         AppColors (azul #1F6BFF, cian #22C8F0, menta #3DEFC0, noche #0B1530), AppLogo, AppTitle
   l10n/strings.dart                  Clase S: todos los textos en español e inglés; meses; conceptos iniciales
-  models/finance.dart                FinanceModule (5 módulos con el color de la hoja), Entry, MonthSummary (fórmulas), MonthId ("AAAA-MM")
-  services/finance_db.dart           SQLite: tablas months y entries; dump/restore para copias
-  services/finance_store.dart        Mes abierto, renglones, empezar mes (copiar anterior), guardar/borrar/deshacer/reordenar, summaries()
+  models/finance.dart                FinanceModule (5 tablas + saving/withdrawal), Entry (fundId), SavingsFund, MonthSummary (fórmulas), MonthId
+  services/finance_db.dart           SQLite v2: months, entries, funds; migración v1->v2; fundMovements; dump/restore
+  services/finance_store.dart        Mes abierto, renglones, fondos y saldos (FundStatus), empezar mes, guardar/borrar/deshacer/reordenar, summaries()
   services/export_service.dart       Excel (Consolidado + una hoja por mes), copia JSON, guardar (SAF), compartir, abrir archivo
   services/xlsx_writer.dart          Escritor mínimo de .xlsx (estilos, colores, celdas unidas, anchos, fechas)
   services/preferences_service.dart  Apariencia, idioma y moneda
   utils/money.dart                   Currency (COP sin decimales, USD, EUR, MXN), Money.format ("$ 1.234.567", "-" para cero), MoneyInputFormatter
-  screens/home_screen.dart           Selector de mes, "Lo que te sobra", tarjetas de módulos, Resumen final, menú lateral
-  screens/module_screen.dart         Un módulo: lista (reordenar, deslizar para borrar con deshacer, pagado), total; deducciones con salud y pensión
+  screens/shell_screen.dart          Pantalla principal: AppSection (7 módulos), barra con el color del módulo + MonthSelector, menú de módulos con totales
+  screens/summary_page.dart          Módulo Resumen final: lo que sobra, SummaryTable, total ahorrado
+  screens/module_page.dart           Módulo de renglones (sin AppBar propio): lista, reordenar, deslizar para borrar con deshacer, pagado, total; Deducciones con salud y pensión y ahorros por nómina
+  screens/savings_page.dart          Módulo Ahorros: total acumulado, tarjeta por fondo (aporte/retiro del mes, meta), editor de fondo
+  screens/fund_screen.dart           Detalle de un ahorro: saldo, historial, editar, archivar, eliminar
   screens/report_screen.dart         Consolidado anual: totales, barras ingresos vs gastos, tabla mes a mes
   screens/export_screen.dart         Excel (mes / año / todo) y copia de seguridad: guardar, compartir, restaurar
   widgets/entry_editor.dart          Hoja para agregar/editar un renglón
   widgets/summary_table.dart         SummaryTable (Resumen final) y MonthSelector
+  widgets/start_month_card.dart      Mes sin empezar: copiar del anterior o empezar en blanco
+  widgets/amount_dialog.dart         askAmount(): diálogo para escribir un valor
 plataforma/android/MainActivity.kt   Canal 'ficonza/files': "save" (ACTION_CREATE_DOCUMENT) y "open" (ACTION_OPEN_DOCUMENT)
 ```
 
-## Base de datos (ficonza.db, versión 1)
+## Base de datos (ficonza.db, versión 2)
 
 - `months(id TEXT PK "AAAA-MM", health_pct REAL default 8, created_at)`: un mes existe cuando se "empieza".
-- `entries(id, month, module, concept, amount REAL, date, note, applies_health, paid, position, created_at)`; `module` es el nombre del enum (`income`, `occasional`, `fixed`, `variable`, `deduction`).
-- Si se cambia el esquema: subir `_version` en `FinanceDb` y agregar `onUpgrade` (no borrar datos del usuario).
+- `entries(id, month, module, concept, amount REAL, date, note, applies_health, paid, position, created_at, fund_id)`; `module` es el nombre del enum (`income`, `occasional`, `fixed`, `variable`, `deduction`, `saving` = aporte, `withdrawal` = retiro).
+- `funds(id, name, initial_balance, from_salary, goal, archived, created_at)`: cada ahorro.
+- **Migración 1 -> 2** (`onUpgrade`): agrega `fund_id`, crea `funds` y pasa los renglones de Deducciones cuyo concepto contiene "ahorro"/"saving" a aportes de un fondo con ese nombre (por nómina). Restaurar una copia v1 hace la misma conversión.
+- Si se cambia el esquema: subir `_version` en `FinanceDb` y agregar el paso en `onUpgrade` (no borrar datos del usuario).
 
 ## Fórmulas (MonthSummary)
 
 - Salud y pensión = (suma de ingresos con `applies_health`) × `health_pct` / 100. Por defecto 8 %; editable por mes. El "Auxilio de internet" inicial viene sin salud y pensión (no salarial).
-- Total deducciones = salud y pensión + renglones del módulo Deducciones (ahorro vacacional, etc.).
-- **Ingresos netos = ingresos + ingresos ocasionales − total deducciones.** (Decisión: la hoja original no mostraba dónde sumaban los ocasionales; si el usuario dice otra cosa, cambiar `netIncome`.)
+- Total deducciones = salud y pensión + otras deducciones (módulo Deducciones) + **aportes a ahorros por nómina** (`from_salary`).
+- **Ingresos netos = ingresos + ocasionales + retiros de ahorros − total deducciones − aportes a ahorros voluntarios.** (Los ocasionales se suman: decisión pendiente de confirmar con el usuario.)
 - Saldo disponible (lo que sobra) = ingresos netos − gastos fijos − gastos variables.
+- Saldo de un ahorro hasta un mes = saldo inicial + aportes − retiros de todos los meses <= ese mes.
 
 ## Decisiones
 
-- **Meses.** Cada mes es independiente. Al abrir un mes sin empezar se ofrece copiar del mes creado más reciente anterior: ingresos, gastos fijos y deducciones (con `paid` en falso); ocasionales y variables no se copian. El primer mes de todos crea los conceptos de la hoja en cero.
+- **Color uniforme (pedido del usuario).** Módulos, barras, botones, íconos y textos usan un solo color: el azul de la marca (`AppColors.blue`; en modo oscuro el `primary` es #6FA0FF). Barras y botones flotantes van en el tema (`appBarTheme`, `floatingActionButtonTheme`); las tarjetas grandes usan `AppColors.brandGradient`. **Los colores mezclados de cada tabla (`FinanceModule.color`) solo se usan en los reportes**: `report_screen.dart` y el Excel. Única excepción: el rojo de borrar (deslizar y confirmar eliminación).
+- **Navegación (pedido del usuario).** Cada tabla es un módulo en su propia pantalla, elegido desde el menú ☰ (con el total del mes al lado). Arranca en Resumen final; "Atrás" vuelve al Resumen. La barra superior lleva el nombre del módulo y el selector de mes.
+- **Ahorros (pedido del usuario).** Las deducciones de salario que son ahorro deben acumularse: cada fondo tiene saldo inicial, aportes mensuales, retiros y meta opcional. Por nómina = deducción; voluntario = se resta de lo que sobra; retiro = suma a lo disponible del mes. Archivar un fondo lo oculta y deja de copiarse.
+- **Meses.** Cada mes es independiente. Al abrir un mes sin empezar se ofrece copiar del mes creado más reciente anterior: ingresos, gastos fijos, deducciones y aportes a ahorros (con `paid` en falso); ocasionales, variables y retiros no se copian. El primer mes de todos crea los conceptos de la hoja en cero y el fondo "Ahorro vacacional".
 - **Exportar.** El Excel replica la hoja: tablas con los mismos colores (verde, azul, morado, rojo, naranja), "(−)" y saldo en verde o rojo. Formato de miles `#,##0` (o con decimales según la moneda). Guardar usa el selector del sistema (Descargas, Drive…) sin pedir permisos; compartir usa share_plus.
-- **Copia de seguridad.** JSON `{format: "ficonza-backup", version: 1, exportedAt, months, entries}`. Restaurar reemplaza todo (con confirmación).
+- **Copia de seguridad.** JSON `{format: "ficonza-backup", version: 2, exportedAt, months, funds, entries}` (los fondos conservan su id). Restaurar reemplaza todo (con confirmación) y acepta copias v1.
+- **Excel.** Consolidado con columnas de retiros, deducciones, ahorros voluntarios y total ahorrado acumulado; cada mes incluye la tabla AHORROS (aporte, retiro, acumulado).
 - **Borrar.** Deslizar quita el renglón de la lista al instante (lo exige `Dismissible`) y luego de la base; "Deshacer" lo vuelve a insertar sin id.
 - **Logo.** Ícono del celular = símbolo (F + barras); logo completo con "Ficonza" en el arranque. Recortes con Pillow.
 - **Idioma y apariencia.** `[en, es]` con inglés de respaldo; `ThemeMode.system` por defecto; selectores en el menú. Ningún texto fijo en pantallas.
-- **Nombres.** Evitar nombres genéricos que choquen con Flutter (en Vixago Player, `RepeatMode` rompió la compilación con Flutter 3.47).
+- **Nombres.** Evitar nombres genéricos que choquen con Flutter (en Vixago Player, `RepeatMode` rompió la compilación con Flutter 3.47); por eso la sección se llama `AppSection`.
 
 ## Estado actual
 
 - v0.1.0: base del proyecto (ícono, arranque, idioma, apariencia, pantalla provisional). Repositorio: https://github.com/vperea95/Ficonza (rama `main`). Esperando que el usuario defina los módulos.
-- v0.2.0: los 6 módulos, base de datos, reporte consolidado, Excel y copia de seguridad. Escrita completa, **sin compilar todavía**.
+- v0.2.0: los 6 módulos, base de datos, reporte consolidado, Excel y copia de seguridad. Compilada con éxito en Actions al primer intento (06/10/2026). Falta probarla en un celular.
+- v0.3.0: cada módulo en su propia pantalla (menú de módulos), módulo Ahorros acumulativo, color uniforme (mezclados solo en reportes); base de datos v2 con migración. Escrita completa, **sin compilar todavía**.

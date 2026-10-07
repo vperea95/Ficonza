@@ -66,12 +66,12 @@ class S {
   String get nextMonth => _t('Mes siguiente', 'Next month');
   String startMonthTitle(String month) => _t('Empezar $month', 'Start $month');
   String startMonthCopyHint(String prev) => _t(
-        'Puedes copiar los ingresos, gastos fijos y deducciones de $prev (los gastos variables y los ingresos ocasionales empiezan vacíos), o empezar en blanco.',
-        'You can copy the income, fixed expenses and deductions from $prev (variable expenses and occasional income start empty), or start blank.',
+        'Puedes copiar los ingresos, gastos fijos, deducciones y aportes a ahorros de $prev (los gastos variables, los ingresos ocasionales y los retiros empiezan vacíos), o empezar en blanco.',
+        'You can copy the income, fixed expenses, deductions and savings deposits from $prev (variable expenses, occasional income and withdrawals start empty), or start blank.',
       );
   String get startMonthFirstHint => _t(
-        'Se crearán los conceptos de ingresos de tu hoja (sueldo, bonificaciones, auxilio) y el ahorro vacacional, en cero, para que solo escribas los valores.',
-        'The income concepts from your sheet (salary, bonuses, allowance) and vacation savings will be created at zero, so you only type the amounts.',
+        'Se crearán los conceptos de ingresos de tu hoja (sueldo, bonificaciones, auxilio) y el ahorro vacacional en el módulo Ahorros, en cero, para que solo escribas los valores.',
+        'The income concepts from your sheet (salary, bonuses, allowance) and vacation savings in the Savings module will be created at zero, so you only type the amounts.',
       );
   String copyFrom(String prev) => _t('Copiar de $prev', 'Copy from $prev');
   String get startEmpty => _t('Empezar en blanco', 'Start blank');
@@ -97,6 +97,8 @@ class S {
         FinanceModule.fixed => moduleFixed,
         FinanceModule.variable => moduleVariable,
         FinanceModule.deduction => _t('Deducciones', 'Deductions'),
+        FinanceModule.saving => moduleSavings,
+        FinanceModule.withdrawal => withdrawal,
       };
 
   String totalOf(FinanceModule m) => switch (m) {
@@ -105,6 +107,8 @@ class S {
         FinanceModule.fixed => totalFixed,
         FinanceModule.variable => totalVariable,
         FinanceModule.deduction => totalDeductions,
+        FinanceModule.saving => totalSaved,
+        FinanceModule.withdrawal => savingsWithdrawals,
       };
 
   String emptyModule(FinanceModule m) => switch (m) {
@@ -112,7 +116,10 @@ class S {
         FinanceModule.occasional => _t('Agrega lo que recibas de vez en cuando: primas, ventas, regalos…', 'Add income you receive now and then: bonuses, sales, gifts…'),
         FinanceModule.fixed => _t('Agrega los gastos que pagas cada mes: arriendo, servicios, cuotas…', 'Add the bills you pay every month: rent, utilities, installments…'),
         FinanceModule.variable => _t('Agrega los gastos del día a día: mercado, transporte, salidas…', 'Add day-to-day expenses: groceries, transport, outings…'),
-        FinanceModule.deduction => _t('Agrega otras deducciones, como el ahorro vacacional.', 'Add other deductions, such as vacation savings.'),
+        FinanceModule.deduction => _t(
+            'Agrega otras deducciones de tu salario que no son ahorro (por ejemplo, una libranza). Los ahorros van en el módulo Ahorros.',
+            "Add other salary deductions that aren't savings (e.g. a payroll loan). Savings go in the Savings module."),
+        FinanceModule.saving || FinanceModule.withdrawal => noSavings,
       };
 
   String conceptHint(FinanceModule m) => switch (m) {
@@ -120,7 +127,8 @@ class S {
         FinanceModule.occasional => _t('Ej.: Prima de junio', 'E.g.: June bonus'),
         FinanceModule.fixed => _t('Ej.: Arriendo', 'E.g.: Rent'),
         FinanceModule.variable => _t('Ej.: Mercado', 'E.g.: Groceries'),
-        FinanceModule.deduction => _t('Ej.: Ahorro vacacional', 'E.g.: Vacation savings'),
+        FinanceModule.deduction => _t('Ej.: Libranza', 'E.g.: Payroll loan'),
+        FinanceModule.saving || FinanceModule.withdrawal => savingNameHint,
       };
 
   String get totalIncome => _t('Total ingresos', 'Total income');
@@ -130,6 +138,75 @@ class S {
   String get totalDeductions => _t('Total deducciones', 'Total deductions');
   String get totalExpensesLabel => _t('Gastos', 'Expenses');
   String get netIncome => _t('Ingresos netos', 'Net income');
+
+  // ---------- Módulos (navegación) ----------
+  String get modules => _t('Módulos', 'Modules');
+
+  // ---------- Ahorros ----------
+  String get moduleSavings => _t('Ahorros', 'Savings');
+  String get totalSaved => _t('Total ahorrado', 'Total saved');
+  String get savedInYear => _t('Aportado a ahorros', 'Put into savings');
+  String totalSavedUntil(String month) => _t('Ahorrado hasta $month', 'Saved up to $month');
+  String savedThisMonth(String v) => _t('Este mes aportas $v', 'This month you save $v');
+  String withdrawnThisMonth(String v) => _t('Este mes retiras $v', 'This month you withdraw $v');
+  String get noSavings => _t(
+        'Aún no tienes ahorros. Crea uno con el botón "Nuevo ahorro": por ejemplo, el ahorro vacacional o el fondo de empleados que te descuentan del salario.',
+        'You have no savings yet. Create one with "New saving": for example, vacation savings or an employee fund deducted from your salary.',
+      );
+  String archivedSavings(int n) => _t('Archivados ($n)', 'Archived ($n)');
+  String get newSaving => _t('Nuevo ahorro', 'New saving');
+  String get editSaving => _t('Editar ahorro', 'Edit saving');
+  String get savingName => _t('Nombre del ahorro', 'Saving name');
+  String get savingNameHint => _t('Ej.: Ahorro vacacional, Fondo de empleados', 'E.g.: Vacation savings, Employee fund');
+  String get fromSalary => _t('Me lo descuentan del salario', 'Deducted from my salary');
+  String get fromSalaryShort => _t('Por nómina', 'Payroll');
+  String get voluntaryShort => _t('Voluntario', 'Voluntary');
+  String get fromSalaryHint =>
+      _t('Cuenta como deducción: se resta de tus ingresos netos.', 'Counts as a deduction: it is subtracted from your net income.');
+  String get voluntaryHint =>
+      _t('Lo separas tú: se resta de lo que te sobra.', 'You set it aside yourself: it is subtracted from what you have left.');
+  String get monthlyDeposit => _t('Aporte de este mes', "This month's deposit");
+  String get monthlyDepositHint => _t(
+        'Se copia a los meses siguientes cuando eliges "Copiar del mes anterior".',
+        'It is copied to the next months when you choose "Copy from previous month".',
+      );
+  String get initialBalance => _t('Saldo que ya tenías ahorrado', 'Balance you already had');
+  String get initialBalanceHint =>
+      _t('Lo acumulado antes de empezar a usar Ficonza (opcional).', 'What you had saved before using Ficonza (optional).');
+  String get goalOptional => _t('Meta (opcional)', 'Goal (optional)');
+  String goalProgress(String goal, int pct) => _t('$pct % de la meta de $goal', '$pct% of the $goal goal');
+  String get accumulated => _t('Acumulado', 'Accumulated');
+  String depositThisMonth(String v) => _t('Aporte del mes: $v', 'Deposit this month: $v');
+  String withdrawalThisMonthShort(String v) => _t('Retiro del mes: $v', 'Withdrawal this month: $v');
+  String get deposit => _t('Aporte', 'Deposit');
+  String get depositLabel => _t('Aporte', 'Deposit');
+  String get withdraw => _t('Retirar', 'Withdraw');
+  String get withdrawal => _t('Retiro', 'Withdrawal');
+  String depositOf(String name) => _t('Aporte a $name', 'Deposit to $name');
+  String depositHint(String month) => _t('Lo que aportas en $month.', 'What you save in $month.');
+  String withdrawOf(String name) => _t('Retiro de $name', 'Withdrawal from $name');
+  String withdrawHint(String balance) => _t(
+        'Lo que sacas este mes (disponible: $balance). Ese dinero suma a lo que te sobra.',
+        'What you take out this month (available: $balance). That money adds to what you have left.',
+      );
+  String get savingsFromSalary => _t('Ahorros por nómina', 'Payroll savings');
+  String get savingsFromSalaryHint =>
+      _t('Aportes de este mes a ahorros descontados del salario. Toca para verlos.', "This month's payroll savings. Tap to see them.");
+  String get savingsVoluntary => _t('Ahorros voluntarios', 'Voluntary savings');
+  String get savingsWithdrawals => _t('Retiros de ahorros', 'Savings withdrawals');
+  String get otherDeductions => _t('Otras deducciones', 'Other deductions');
+  String get history => _t('Historial', 'History');
+  String get noMovements => _t('Sin aportes ni retiros todavía.', 'No deposits or withdrawals yet.');
+  String initialBalanceIs(String v) => _t('Saldo inicial: $v', 'Initial balance: $v');
+  String goalIs(String v) => _t('Meta: $v', 'Goal: $v');
+  String get archive => _t('Archivar', 'Archive');
+  String get unarchive => _t('Desarchivar', 'Unarchive');
+  String deleteSavingQuestion(String name) => _t('¿Eliminar "$name"?', 'Delete "$name"?');
+  String get deleteSavingWarning => _t(
+        'Se borrarán también todos sus aportes y retiros de todos los meses. Si solo dejaste de ahorrar, mejor archívalo.',
+        'All its deposits and withdrawals in every month will be deleted too. If you just stopped saving, archive it instead.',
+      );
+  String get delete => _t('Eliminar', 'Delete');
 
   // ---------- Editor ----------
   String newEntryIn(String module) => _t('Nuevo en $module', 'New in $module');
@@ -155,7 +232,7 @@ class S {
   String get balanceTitle => _t('SALDO DISPONIBLE (LO QUE SOBRA)', 'AVAILABLE BALANCE (WHAT IS LEFT)');
   String get balanceShort => _t('Lo que te sobra', 'What you have left');
   String spentOf(String spent, String net) => _t('Gastado $spent de $net', 'Spent $spent of $net');
-  String get summaryNet => _t('Ingresos netos (ingresos - salud/pensión - ahorro)', 'Net income (income - health/pension - savings)');
+  String get summaryNet => _t('Ingresos netos (ingresos - deducciones - ahorros)', 'Net income (income - deductions - savings)');
   String get summaryMinusFixed => _t('(-) Total gastos fijos', '(-) Total fixed expenses');
   String get summaryMinusVariable => _t('(-) Total gastos variables', '(-) Total variable expenses');
 

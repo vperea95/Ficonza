@@ -7,12 +7,17 @@ import '../utils/money.dart';
 import '../widgets/entry_editor.dart';
 
 /// Un módulo (una tabla de la hoja): sus renglones, agregar, editar, borrar,
-/// reordenar y el total. Deducciones muestra además la salud y pensión calculada.
-class ModuleScreen extends StatelessWidget {
-  const ModuleScreen({super.key, required this.store, required this.module});
+/// reordenar y el total. Deducciones muestra además la salud y pensión calculada
+/// y los ahorros que descuentan del salario. La barra superior (nombre del
+/// módulo y mes) la pone ShellScreen.
+class ModulePage extends StatelessWidget {
+  const ModulePage({super.key, required this.store, required this.module, required this.onOpenSavings});
 
   final FinanceStore store;
   final FinanceModule module;
+
+  /// Ir al módulo Ahorros (desde Deducciones).
+  final VoidCallback onOpenSavings;
 
   Future<void> _add(BuildContext context) async {
     final entry = await showEntryEditor(
@@ -77,30 +82,13 @@ class ModuleScreen extends StatelessWidget {
         final total = list.fold(0.0, (a, e) => a + e.amount);
         final isDeduction = module == FinanceModule.deduction;
         return Scaffold(
-          appBar: AppBar(
-            backgroundColor: module.color,
-            foregroundColor: Colors.white,
-            title: Text(s.moduleName(module)),
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(24),
-              child: Padding(
-                padding: const EdgeInsets.only(left: 16, bottom: 8),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(s.monthLabel(store.month), style: const TextStyle(color: Colors.white70)),
-                ),
-              ),
-            ),
-          ),
           floatingActionButton: FloatingActionButton.extended(
-            backgroundColor: module.color,
-            foregroundColor: Colors.white,
             onPressed: () => _add(context),
             icon: const Icon(Icons.add_rounded),
             label: Text(s.add),
           ),
           bottomNavigationBar: _TotalBar(
-            color: module.color,
+            color: Theme.of(context).colorScheme.primary,
             rows: isDeduction
                 ? [(s.totalDeductions, summary.totalDeductions), (s.netIncome, summary.netIncome)]
                 : [(s.totalOf(module), total)],
@@ -118,6 +106,20 @@ class ModuleScreen extends StatelessWidget {
                       trailing: Text(Money.format(summary.health, dashZero: true),
                           style: const TextStyle(fontWeight: FontWeight.w700)),
                       onTap: () => _editPercent(context),
+                    ),
+                  ),
+                ),
+              if (isDeduction)
+                SliverToBoxAdapter(
+                  child: Card(
+                    margin: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+                    child: ListTile(
+                      leading: Icon(Icons.savings_rounded, color: Theme.of(context).colorScheme.primary),
+                      title: Text(s.savingsFromSalary),
+                      subtitle: Text(s.savingsFromSalaryHint),
+                      trailing: Text(Money.format(summary.savingsFromSalary, dashZero: true),
+                          style: const TextStyle(fontWeight: FontWeight.w700)),
+                      onTap: onOpenSavings,
                     ),
                   ),
                 ),
@@ -189,8 +191,8 @@ class _EntryTile extends StatelessWidget {
       leading: onTogglePaid != null
           ? Checkbox(value: entry.paid, onChanged: (_) => onTogglePaid!())
           : CircleAvatar(
-              backgroundColor: entry.module.color.withValues(alpha: 0.12),
-              child: Icon(entry.module.icon, color: entry.module.color, size: 20),
+              backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+              child: Icon(entry.module.icon, color: Theme.of(context).colorScheme.primary, size: 20),
             ),
       title: Text(
         entry.concept,
@@ -240,7 +242,7 @@ class _TotalBar extends StatelessWidget {
                   children: [
                     Expanded(child: Text(label.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.w800))),
                     Text(Money.format(value, dashZero: true),
-                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: value < 0 ? Colors.red : null)),
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
                   ],
                 ),
             ],

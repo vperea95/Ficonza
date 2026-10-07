@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 
-/// Los módulos: cada uno es una tabla de la hoja de cálculo original.
+/// Tipos de renglón. Los cinco primeros son tablas de la hoja de cálculo original;
+/// `saving` (aporte) y `withdrawal` (retiro) pertenecen al módulo Ahorros.
 enum FinanceModule {
   income(Color(0xFF2E7D32), Icons.payments_rounded),
   occasional(Color(0xFF388E3C), Icons.card_giftcard_rounded),
   fixed(Color(0xFF1565C0), Icons.home_work_rounded),
   variable(Color(0xFF6A1B9A), Icons.shopping_cart_rounded),
-  deduction(Color(0xFFC62828), Icons.remove_circle_outline_rounded);
+  deduction(Color(0xFFC62828), Icons.remove_circle_outline_rounded),
+  saving(Color(0xFF00897B), Icons.savings_rounded),
+  withdrawal(Color(0xFF00897B), Icons.move_up_rounded);
 
   const FinanceModule(this.color, this.icon);
 
@@ -16,6 +19,9 @@ enum FinanceModule {
 
   /// Hex sin "#" para el Excel.
   String get hex => color.toARGB32().toRadixString(16).substring(2).toUpperCase();
+
+  /// Módulos que son una lista de renglones (Ahorros tiene su propia pantalla).
+  static const tables = [income, occasional, fixed, variable, deduction];
 
   static FinanceModule? byName(String name) {
     for (final m in values) {
@@ -28,7 +34,10 @@ enum FinanceModule {
 /// Color del "Resumen final" (naranja en la hoja original).
 const summaryColor = Color(0xFFF9A825);
 
-/// Un renglón de una tabla: concepto y valor.
+/// Color del módulo Ahorros.
+const savingsColor = Color(0xFF00897B);
+
+/// Un renglón: concepto y valor. En Ahorros, un aporte o un retiro de un fondo.
 class Entry {
   const Entry({
     this.id,
@@ -41,6 +50,7 @@ class Entry {
     this.appliesHealth = true,
     this.paid = false,
     this.position = 0,
+    this.fundId,
   });
 
   final int? id;
@@ -62,6 +72,9 @@ class Entry {
   final bool paid;
   final int position;
 
+  /// Ahorros: a qué fondo pertenece el aporte o retiro.
+  final int? fundId;
+
   Entry copyWith({
     int? id,
     String? month,
@@ -73,6 +86,7 @@ class Entry {
     bool? appliesHealth,
     bool? paid,
     int? position,
+    int? fundId,
   }) =>
       Entry(
         id: id ?? this.id,
@@ -85,6 +99,21 @@ class Entry {
         appliesHealth: appliesHealth ?? this.appliesHealth,
         paid: paid ?? this.paid,
         position: position ?? this.position,
+        fundId: fundId ?? this.fundId,
+      );
+
+  /// Copia sin id (para insertarla como renglón nuevo).
+  Entry withoutId() => Entry(
+        month: month,
+        module: module,
+        concept: concept,
+        amount: amount,
+        date: date,
+        note: note,
+        appliesHealth: appliesHealth,
+        paid: paid,
+        position: position,
+        fundId: fundId,
       );
 
   Map<String, Object?> toRow() => {
@@ -98,6 +127,7 @@ class Entry {
         'applies_health': appliesHealth ? 1 : 0,
         'paid': paid ? 1 : 0,
         'position': position,
+        'fund_id': fundId,
       };
 
   static Entry? fromRow(Map<String, Object?> row) {
@@ -115,8 +145,62 @@ class Entry {
       appliesHealth: (row['applies_health'] as num?)?.toInt() != 0,
       paid: (row['paid'] as num?)?.toInt() == 1,
       position: (row['position'] as num?)?.toInt() ?? 0,
+      fundId: (row['fund_id'] as num?)?.toInt(),
     );
   }
+}
+
+/// Un ahorro que se va acumulando mes a mes (por ejemplo, "Ahorro vacacional").
+class SavingsFund {
+  const SavingsFund({
+    this.id,
+    required this.name,
+    this.initialBalance = 0,
+    this.fromSalary = true,
+    this.goal = 0,
+    this.archived = false,
+  });
+
+  final int? id;
+  final String name;
+
+  /// Lo que ya tenía ahorrado antes de empezar a usar la app.
+  final double initialBalance;
+
+  /// Se lo descuentan del salario (si no, es un ahorro voluntario).
+  final bool fromSalary;
+
+  /// Meta opcional (0 = sin meta).
+  final double goal;
+  final bool archived;
+
+  SavingsFund copyWith({String? name, double? initialBalance, bool? fromSalary, double? goal, bool? archived}) =>
+      SavingsFund(
+        id: id,
+        name: name ?? this.name,
+        initialBalance: initialBalance ?? this.initialBalance,
+        fromSalary: fromSalary ?? this.fromSalary,
+        goal: goal ?? this.goal,
+        archived: archived ?? this.archived,
+      );
+
+  Map<String, Object?> toRow() => {
+        if (id != null) 'id': id,
+        'name': name,
+        'initial_balance': initialBalance,
+        'from_salary': fromSalary ? 1 : 0,
+        'goal': goal,
+        'archived': archived ? 1 : 0,
+      };
+
+  static SavingsFund fromRow(Map<String, Object?> row) => SavingsFund(
+        id: (row['id'] as num?)?.toInt(),
+        name: '${row['name'] ?? ''}',
+        initialBalance: (row['initial_balance'] as num?)?.toDouble() ?? 0,
+        fromSalary: (row['from_salary'] as num?)?.toInt() != 0,
+        goal: (row['goal'] as num?)?.toDouble() ?? 0,
+        archived: (row['archived'] as num?)?.toInt() == 1,
+      );
 }
 
 /// Totales de un mes, con la misma lógica de la hoja.
@@ -131,6 +215,9 @@ class MonthSummary {
     required this.fixed,
     required this.fixedPaid,
     required this.variable,
+    required this.savingsFromSalary,
+    required this.savingsVoluntary,
+    required this.withdrawals,
   });
 
   final String month;
@@ -141,38 +228,52 @@ class MonthSummary {
   final double healthBase;
   final double healthPercent;
 
-  /// Ahorro vacacional y otras deducciones escritas a mano.
+  /// Otras deducciones escritas a mano (no ahorros).
   final double otherDeductions;
   final double fixed;
   final double fixedPaid;
   final double variable;
 
-  double get health => healthBase * healthPercent / 100;
-  double get totalDeductions => health + otherDeductions;
+  /// Aportes a ahorros que descuentan del salario.
+  final double savingsFromSalary;
 
-  /// Ingresos + ocasionales - deducciones.
-  double get netIncome => income + occasional - totalDeductions;
+  /// Aportes a ahorros voluntarios (los separa uno mismo).
+  final double savingsVoluntary;
+
+  /// Dinero sacado de los ahorros este mes (queda disponible para gastar).
+  final double withdrawals;
+
+  double get health => healthBase * healthPercent / 100;
+  double get savings => savingsFromSalary + savingsVoluntary;
+
+  /// Lo que descuentan del salario: salud y pensión, otras deducciones y ahorros por nómina.
+  double get totalDeductions => health + otherDeductions + savingsFromSalary;
+
+  /// Ingresos + ocasionales + retiros de ahorro - deducciones - ahorros voluntarios.
+  double get netIncome => income + occasional + withdrawals - totalDeductions - savingsVoluntary;
   double get totalExpenses => fixed + variable;
 
   /// Lo que sobra.
   double get balance => netIncome - fixed - variable;
 
-  bool get isEmpty => income == 0 && occasional == 0 && otherDeductions == 0 && fixed == 0 && variable == 0;
+  bool get isEmpty =>
+      income == 0 && occasional == 0 && otherDeductions == 0 && fixed == 0 && variable == 0 && savings == 0 && withdrawals == 0;
 
-  factory MonthSummary.from(String month, double healthPercent, List<Entry> entries) {
-    double sum(FinanceModule m) => entries.where((e) => e.module == m).fold(0.0, (a, e) => a + e.amount);
+  factory MonthSummary.from(String month, double healthPercent, List<Entry> entries, {Set<int> salaryFunds = const {}}) {
+    double sum(bool Function(Entry) test) => entries.where(test).fold(0.0, (a, e) => a + e.amount);
     return MonthSummary(
       month: month,
-      income: sum(FinanceModule.income),
-      occasional: sum(FinanceModule.occasional),
-      healthBase: entries
-          .where((e) => e.module == FinanceModule.income && e.appliesHealth)
-          .fold(0.0, (a, e) => a + e.amount),
+      income: sum((e) => e.module == FinanceModule.income),
+      occasional: sum((e) => e.module == FinanceModule.occasional),
+      healthBase: sum((e) => e.module == FinanceModule.income && e.appliesHealth),
       healthPercent: healthPercent,
-      otherDeductions: sum(FinanceModule.deduction),
-      fixed: sum(FinanceModule.fixed),
-      fixedPaid: entries.where((e) => e.module == FinanceModule.fixed && e.paid).fold(0.0, (a, e) => a + e.amount),
-      variable: sum(FinanceModule.variable),
+      otherDeductions: sum((e) => e.module == FinanceModule.deduction),
+      fixed: sum((e) => e.module == FinanceModule.fixed),
+      fixedPaid: sum((e) => e.module == FinanceModule.fixed && e.paid),
+      variable: sum((e) => e.module == FinanceModule.variable),
+      savingsFromSalary: sum((e) => e.module == FinanceModule.saving && salaryFunds.contains(e.fundId)),
+      savingsVoluntary: sum((e) => e.module == FinanceModule.saving && !salaryFunds.contains(e.fundId)),
+      withdrawals: sum((e) => e.module == FinanceModule.withdrawal),
     );
   }
 }

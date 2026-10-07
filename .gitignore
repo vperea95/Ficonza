@@ -4,3 +4,8 @@ build/
 .flutter-plugins
 .flutter-plugins-dependencies
 *.iml
+
+# APK descargados de GitHub Actions
+*.apk
+ficonza-apk/
+ficonza-apk.zip

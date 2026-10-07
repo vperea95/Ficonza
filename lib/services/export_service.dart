@@ -21,7 +21,7 @@ class ExportService {
 
   static const _channel = MethodChannel('ficonza/files');
   static const backupFormat = 'ficonza-backup';
-  static const backupVersion = 1;
+  static const backupVersion = 2;
 
   final FinanceStore store;
 
@@ -32,23 +32,44 @@ class ExportService {
     final s = S.current;
     final summaries = await store.summaries(from: from, to: to);
     final entries = await store.db.entries(fromMonth: from, toMonth: to);
+    final funds = await store.db.funds();
+    // Para el saldo acumulado de los ahorros se necesitan también los meses anteriores a [from].
+    final moves = (await store.db.entries(toMonth: to))
+        .where((e) => e.module == FinanceModule.saving || e.module == FinanceModule.withdrawal)
+        .toList();
+    double fundBalance(SavingsFund f, String month) => f.initialBalance +
+        moves
+            .where((e) => e.fundId == f.id && e.month.compareTo(month) <= 0)
+            .fold(0.0, (a, e) => a + (e.module == FinanceModule.withdrawal ? -e.amount : e.amount));
+    double savedUntil(String month) => funds.fold(0.0, (a, f) => a + fundBalance(f, month));
     final money = decimals > 0 ? '#,##0.${'0' * decimals}' : '#,##0';
     final wb = XlsxWorkbook();
 
     // ----- Consolidado: una fila por mes -----
     final sheet = wb.addSheet(s.consolidated);
-    const headers = 8;
     final titleStyle = XStyle(bold: true, fill: '0B1530', color: 'FFFFFF', center: true, size: 13);
     final headStyle = XStyle(bold: true, fill: '424242', color: 'FFFFFF', center: true);
     final moneyStyle = XStyle(numberFormat: money);
     final totalLabel = XStyle(bold: true, fill: 'E0E0E0');
     final totalMoney = XStyle(bold: true, fill: 'E0E0E0', numberFormat: money);
+    final cols = [
+      s.month,
+      s.moduleIncome,
+      s.moduleOccasional,
+      s.savingsWithdrawals,
+      s.totalDeductions,
+      s.savingsVoluntary,
+      s.netIncome,
+      s.moduleFixed,
+      s.moduleVariable,
+      s.balance,
+      s.totalSaved,
+    ];
     sheet.set(0, 0, 'Ficonza — ${s.consolidated}', titleStyle);
-    for (var c = 1; c < headers; c++) {
+    for (var c = 1; c < cols.length; c++) {
       sheet.set(0, c, null, titleStyle);
     }
-    sheet.merge(0, 0, headers - 1);
-    final cols = [s.month, s.moduleIncome, s.moduleOccasional, s.totalDeductions, s.netIncome, s.moduleFixed, s.moduleVariable, s.balance];
+    sheet.merge(0, 0, cols.length - 1);
     for (var c = 0; c < cols.length; c++) {
       sheet.set(2, c, cols[c], headStyle);
       sheet.width(c, c == 0 ? 18 : 17);
@@ -56,9 +77,20 @@ class ExportService {
     var row = 3;
     for (final m in summaries) {
       sheet.set(row, 0, s.monthLabel(m.month), const XStyle());
-      final values = [m.income, m.occasional, m.totalDeductions, m.netIncome, m.fixed, m.variable, m.balance];
+      final values = [
+        m.income,
+        m.occasional,
+        m.withdrawals,
+        m.totalDeductions,
+        m.savingsVoluntary,
+        m.netIncome,
+        m.fixed,
+        m.variable,
+        m.balance,
+        savedUntil(m.month),
+      ];
       for (var c = 0; c < values.length; c++) {
-        sheet.set(row, c + 1, values[c], c == values.length - 1 ? _balanceStyle(m.balance, money) : moneyStyle);
+        sheet.set(row, c + 1, values[c], c == values.length - 2 ? _balanceStyle(m.balance, money) : moneyStyle);
       }
       row++;
     }
@@ -67,11 +99,15 @@ class ExportService {
     final totals = [
       total((m) => m.income),
       total((m) => m.occasional),
+      total((m) => m.withdrawals),
       total((m) => m.totalDeductions),
+      total((m) => m.savingsVoluntary),
       total((m) => m.netIncome),
       total((m) => m.fixed),
       total((m) => m.variable),
       total((m) => m.balance),
+      // El ahorro acumulado no se suma: es el saldo al último mes.
+      summaries.isEmpty ? 0.0 : savedUntil(summaries.last.month),
     ];
     for (var c = 0; c < totals.length; c++) {
       sheet.set(row, c + 1, totals[c], totalMoney);
@@ -79,7 +115,7 @@ class ExportService {
 
     // ----- Una hoja por mes, con el diseño de la hoja original -----
     for (final m in summaries) {
-      _monthSheet(wb, m, entries.where((e) => e.month == m.month).toList(), money);
+      _monthSheet(wb, m, entries.where((e) => e.month == m.month).toList(), money, funds, fundBalance);
     }
     return wb.encode();
   }
@@ -87,13 +123,23 @@ class ExportService {
   static XStyle _balanceStyle(double value, String money) =>
       XStyle(bold: true, numberFormat: money, color: value < 0 ? 'C62828' : '2E7D32');
 
-  void _monthSheet(XlsxWorkbook wb, MonthSummary m, List<Entry> entries, String money) {
+  void _monthSheet(
+    XlsxWorkbook wb,
+    MonthSummary m,
+    List<Entry> entries,
+    String money,
+    List<SavingsFund> funds,
+    double Function(SavingsFund, String) fundBalance,
+  ) {
     final s = S.current;
     final sheet = wb.addSheet(s.monthLabel(m.month));
     sheet
       ..width(0, 34)
       ..width(1, 16)
-      ..width(2, 14);
+      ..width(2, 14)
+      ..width(3, 16);
+    String fundName(int? id) => funds.where((f) => f.id == id).firstOrNull?.name ?? '';
+    final salaryFunds = {for (final f in funds) if (f.fromSalary) f.id};
     var row = 0;
     sheet.set(row, 0, 'Ficonza — ${s.monthLabel(m.month)}', const XStyle(bold: true, size: 14, border: false));
     row += 2;
@@ -155,6 +201,13 @@ class ExportService {
         ..set(row, 1, e.amount, moneyStyle);
       row++;
     }
+    // Ahorros que descuentan del salario.
+    for (final e in entries.where((e) => e.module == FinanceModule.saving && salaryFunds.contains(e.fundId))) {
+      sheet
+        ..set(row, 0, '${s.savingsFromSalary}: ${fundName(e.fundId)}')
+        ..set(row, 1, e.amount, moneyStyle);
+      row++;
+    }
     sheet
       ..set(row, 0, s.totalDeductions.toUpperCase(), totalLabel)
       ..set(row, 1, m.totalDeductions, totalMoney);
@@ -163,6 +216,41 @@ class ExportService {
     sheet
       ..set(row, 0, s.netIncome.toUpperCase(), green)
       ..set(row, 1, m.netIncome, XStyle(bold: true, fill: 'A5D6A7', numberFormat: money));
+    row += 2;
+
+    // Ahorros: aporte y retiro del mes, y saldo acumulado hasta este mes.
+    final savTitle = XStyle(bold: true, fill: FinanceModule.saving.hex, color: 'FFFFFF', center: true);
+    for (var c = 0; c <= 3; c++) {
+      sheet.set(row, c, c == 0 ? s.moduleSavings.toUpperCase() : null, savTitle);
+    }
+    sheet.merge(row, 0, 3);
+    row++;
+    sheet
+      ..set(row, 0, s.savingName, headStyle)
+      ..set(row, 1, s.depositLabel, headStyle)
+      ..set(row, 2, s.withdrawal, headStyle)
+      ..set(row, 3, s.accumulated, headStyle);
+    row++;
+    var savedTotal = 0.0;
+    for (final f in funds) {
+      double sum(FinanceModule k) => entries.where((e) => e.module == k && e.fundId == f.id).fold(0.0, (a, e) => a + e.amount);
+      final balance = fundBalance(f, m.month);
+      final deposit = sum(FinanceModule.saving);
+      final withdrawal = sum(FinanceModule.withdrawal);
+      if (f.archived && deposit == 0 && withdrawal == 0 && balance == 0) continue;
+      savedTotal += balance;
+      sheet
+        ..set(row, 0, f.fromSalary ? '${f.name} (${s.fromSalaryShort})' : f.name)
+        ..set(row, 1, deposit, moneyStyle)
+        ..set(row, 2, withdrawal, moneyStyle)
+        ..set(row, 3, balance, moneyStyle);
+      row++;
+    }
+    sheet
+      ..set(row, 0, s.totalSaved.toUpperCase(), totalLabel)
+      ..set(row, 1, m.savings, totalMoney)
+      ..set(row, 2, m.withdrawals, totalMoney)
+      ..set(row, 3, savedTotal, totalMoney);
     row += 2;
 
     // Resumen final.
@@ -199,19 +287,22 @@ class ExportService {
       'version': backupVersion,
       'exportedAt': DateTime.now().toIso8601String(),
       'months': dump['months'],
+      'funds': dump['funds'],
       'entries': dump['entries'],
     };
     return Uint8List.fromList(utf8.encode(const JsonEncoder.withIndent('  ').convert(json)));
   }
 
   /// Lee una copia de seguridad. Devuelve cuántos meses y renglones trae, o null si no es válida.
-  static ({List<Map<String, Object?>> months, List<Map<String, Object?>> entries})? parseBackup(Uint8List bytes) {
+  /// Las copias de la versión 1 no traen `funds`: al restaurar, el ahorro que estaba en deducciones se convierte.
+  static ({List<Map<String, Object?>> months, List<Map<String, Object?>> entries, List<Map<String, Object?>> funds})?
+      parseBackup(Uint8List bytes) {
     try {
       final json = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
       if (json['format'] != backupFormat) return null;
       List<Map<String, Object?>> list(String key) =>
           [for (final m in (json[key] as List? ?? const [])) if (m is Map) Map<String, Object?>.from(m)];
-      return (months: list('months'), entries: list('entries'));
+      return (months: list('months'), entries: list('entries'), funds: list('funds'));
     } catch (e) {
       debugPrint('Copia no válida: $e');
       return null;
