@@ -421,6 +421,45 @@ class S {
   String get legalValuesHint => _t('Salario mínimo 2026', '2026 minimum wage');
   String get minimumWage => _t('Salario mínimo (SMMLV)', 'Minimum wage');
 
+  // ---------- Bienvenida (configuración inicial en carrusel) ----------
+  String get welcomeTitle => _t('Bienvenido a Ficonza', 'Welcome to Ficonza');
+  String get welcomeBody => _t(
+        'Vamos a configurar tus finanzas en unos pasos: tu fecha de ingreso, tu sueldo, tus ingresos adicionales y tus liquidaciones. Así Ficonza calcula todo por ti.',
+        "Let's set up your finances in a few steps: your hire date, salary, additional income and settlements. Then Ficonza calculates everything for you.",
+      );
+  String get letsStart => _t('Comenzar', "Let's start");
+  String get haveBackup => _t('Ya tengo una copia de seguridad', 'I already have a backup');
+  String get next => _t('Siguiente', 'Next');
+  String get yes => _t('Sí', 'Yes');
+  String get no => _t('No', 'No');
+  String get anotherIncomeTitle => _t('Otro ingreso adicional', 'Another additional income');
+  String get addAnotherQuestion => _t('¿Deseas agregar otro ingreso?', 'Do you want to add another income?');
+  String get yesAddAnother => _t('Sí, agregar otro', 'Yes, add another');
+  String get noContinue => _t('No, continuar', 'No, continue');
+  String get setupPrimaBody => _t(
+        'La prima se paga por semestre (30 de junio y 20 de diciembre). Si ya te la pagaron, se cuenta desde el día siguiente al corte.',
+        'The prima is paid per semester (June 30 and December 20). If it was paid, it accrues from the day after the cut-off.',
+      );
+  String get setupYearBody => _t(
+        'Las cesantías se consignan al fondo antes del 14 de febrero y los intereses se pagan en enero, con corte al 31 de diciembre.',
+        'Severance is deposited into the fund before February 14 and interest is paid in January, with a December 31 cut-off.',
+      );
+  String get setupIntegralQuestion => _t('¿Tu salario es integral?', 'Is your salary an integral salary?');
+  String get setupSummaryTitle => _t('¡Todo listo!', 'All set!');
+  String get setupSummaryBody => _t(
+        'Revisa tus datos. Puedes cambiarlos cuando quieras en los módulos Ingresos y Prestaciones sociales.',
+        'Check your data. You can change it anytime in the Income and Employee benefits modules.',
+      );
+  String paidUntil(String date) => _t('Pagada hasta el $date', 'Paid up to $date');
+  String takenUntil(String date) => _t('Disfrutadas hasta el $date', 'Taken up to $date');
+  String get pendingSinceHire => _t('Pendiente desde tu ingreso', 'Pending since your hire date');
+  String get startUsing => _t('Empezar a usar Ficonza', 'Start using Ficonza');
+  String get skipSetupQuestion => _t('¿Omitir la configuración?', 'Skip the setup?');
+  String get skipSetupBody => _t(
+        'Podrás escribir tus ingresos en el módulo Ingresos y tus datos laborales en Prestaciones sociales.',
+        'You can enter your income in the Income module and your employment data in Employee benefits.',
+      );
+
   // ---------- Configuración inicial: fecha de ingreso y liquidaciones ----------
   String get setupHireTitle => _t('¿Cuándo ingresaste a tu trabajo actual?', 'When did you start your current job?');
   String get setupHireBody => _t(
