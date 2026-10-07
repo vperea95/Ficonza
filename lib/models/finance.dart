@@ -31,6 +31,30 @@ enum FinanceModule {
   }
 }
 
+/// Tipos de ingreso adicional, con lo que dice la norma colombiana sobre si
+/// constituyen salario (y por lo tanto pagan salud y pensión).
+/// - Constituyen salario (CST art. 127): horas extras, recargos, comisiones y
+///   bonificaciones habituales por desempeño.
+/// - No constituyen salario (CST art. 128): auxilio de transporte, auxilio de
+///   conectividad y pagos pactados expresamente como no salariales.
+/// - Regla del 40 % (Ley 1393 de 2010, art. 30): lo no salarial que supere el 40 %
+///   del total sí paga salud y pensión (lo calcula MonthSummary).
+enum IncomeKind {
+  overtime(true, Icons.more_time_rounded),
+  commission(true, Icons.handshake_rounded),
+  salaryBonus(true, Icons.emoji_events_rounded),
+  transport(false, Icons.directions_bus_rounded),
+  connectivity(false, Icons.wifi_rounded),
+  nonSalaryBonus(false, Icons.redeem_rounded),
+  other(true, Icons.add_circle_outline_rounded);
+
+  const IncomeKind(this.appliesHealth, this.icon);
+
+  /// Lo que normalmente indica la ley; el usuario lo puede cambiar.
+  final bool appliesHealth;
+  final IconData icon;
+}
+
 /// Color del "Resumen final" (naranja en la hoja original).
 const summaryColor = Color(0xFFF9A825);
 
@@ -209,7 +233,8 @@ class MonthSummary {
     required this.month,
     required this.income,
     required this.occasional,
-    required this.healthBase,
+    required this.salaryIncome,
+    required this.nonSalaryIncome,
     required this.healthPercent,
     required this.otherDeductions,
     required this.fixed,
@@ -224,9 +249,22 @@ class MonthSummary {
   final double income;
   final double occasional;
 
-  /// Ingresos a los que se les descuenta salud y pensión.
-  final double healthBase;
+  /// Ingresos que constituyen salario (sueldo, horas extras, comisiones…): pagan salud y pensión.
+  final double salaryIncome;
+
+  /// Ingresos que no constituyen salario (auxilios, bonificaciones no salariales).
+  final double nonSalaryIncome;
   final double healthPercent;
+
+  /// Regla del 40 % (Ley 1393 de 2010, art. 30): lo no salarial que supere el 40 %
+  /// del total de lo que se recibe sí paga salud y pensión.
+  double get nonSalaryExcess {
+    final excess = nonSalaryIncome - 0.4 * (salaryIncome + nonSalaryIncome);
+    return excess > 0 ? excess : 0;
+  }
+
+  /// Base para salud y pensión (IBC): lo salarial más el excedente no salarial.
+  double get healthBase => salaryIncome + nonSalaryExcess;
 
   /// Otras deducciones escritas a mano (no ahorros).
   final double otherDeductions;
@@ -265,7 +303,8 @@ class MonthSummary {
       month: month,
       income: sum((e) => e.module == FinanceModule.income),
       occasional: sum((e) => e.module == FinanceModule.occasional),
-      healthBase: sum((e) => e.module == FinanceModule.income && e.appliesHealth),
+      salaryIncome: sum((e) => e.module == FinanceModule.income && e.appliesHealth),
+      nonSalaryIncome: sum((e) => e.module == FinanceModule.income && !e.appliesHealth),
       healthPercent: healthPercent,
       otherDeductions: sum((e) => e.module == FinanceModule.deduction),
       fixed: sum((e) => e.module == FinanceModule.fixed),

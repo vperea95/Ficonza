@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
+import '../models/benefits.dart';
 import '../models/finance.dart';
 
 /// Textos de la app en español e inglés. Se elige según el idioma del sistema
@@ -70,8 +71,8 @@ class S {
         'You can copy the income, fixed expenses, deductions and savings deposits from $prev (variable expenses, occasional income and withdrawals start empty), or start blank.',
       );
   String get startMonthFirstHint => _t(
-        'Se crearán los conceptos de ingresos de tu hoja (sueldo, bonificaciones, auxilio) y el ahorro vacacional en el módulo Ahorros, en cero, para que solo escribas los valores.',
-        'The income concepts from your sheet (salary, bonuses, allowance) and vacation savings in the Savings module will be created at zero, so you only type the amounts.',
+        'Luego, en el módulo Ingresos, la app te preguntará tu sueldo base y tus ingresos adicionales. También se creará el ahorro vacacional en el módulo Ahorros.',
+        'Then, in the Income module, the app will ask for your base salary and additional income. Vacation savings will also be created in the Savings module.',
       );
   String copyFrom(String prev) => _t('Copiar de $prev', 'Copy from $prev');
   String get startEmpty => _t('Empezar en blanco', 'Start blank');
@@ -208,14 +209,228 @@ class S {
       );
   String get delete => _t('Eliminar', 'Delete');
 
+  // ---------- Asistente de ingresos (primera vez) ----------
+  String stepOf(int n, int total) => _t('Paso $n de $total', 'Step $n of $total');
+  String get skip => _t('Omitir', 'Skip');
+  String get back => _t('Atrás', 'Back');
+  String get continueLabel => _t('Continuar', 'Continue');
+  String get setupSalaryTitle => _t('¿Cuál es tu sueldo base?', "What's your base salary?");
+  String get setupSalaryBody => _t(
+        'Es el salario mensual que aparece en tu contrato, antes de descuentos.',
+        'The monthly salary in your contract, before deductions.',
+      );
+  String get setupSalaryHealthNote => _t(
+        'Al sueldo base siempre se le descuenta salud (4 %) y pensión (4 %).',
+        'Health (4%) and pension (4%) are always deducted from the base salary.',
+      );
+  String get setupExtrasQuestion => _t('¿Tienes ingresos adicionales?', 'Do you have additional income?');
+  String get setupExtrasBody => _t(
+        'Por ejemplo: horas extras, comisiones, bonificaciones o auxilios que recibes cada mes.',
+        'For example: overtime, commissions, bonuses or allowances you receive every month.',
+      );
+  String get yesHaveExtras => _t('Sí, tengo ingresos adicionales', 'Yes, I have additional income');
+  String get noOnlySalary => _t('No, solo mi sueldo', 'No, just my salary');
+  String get setupExtrasListTitle => _t('Tus ingresos', 'Your income');
+  String get setupExtrasListBody => _t(
+        'Agrega cada ingreso adicional. Luego puedes cambiarlos cuando quieras en este módulo.',
+        'Add each additional income. You can change them anytime in this module.',
+      );
+  String get addAnotherIncome => _t('Agregar otro ingreso', 'Add another income');
+  String get finishSetup => _t('Terminar', 'Finish');
+  String get withHealth => _t('Con salud y pensión', 'With health and pension');
+  String get withoutHealth => _t('Sin salud y pensión', 'Without health and pension');
+  String get extraIncomeTitle => _t('Ingreso adicional', 'Additional income');
+  String get incomeKindQuestion => _t('¿Qué tipo de ingreso es?', 'What kind of income is it?');
+  String get chooseIncomeKind => _t('Elige el tipo de ingreso', 'Choose the kind of income');
+  String get monthlyValue => _t('Valor mensual', 'Monthly amount');
+  String get healthQuestion => _t('¿Se le descuenta salud y pensión?', 'Are health and pension deducted?');
+
+  String incomeKindName(IncomeKind k) => switch (k) {
+        IncomeKind.overtime => _t('Horas extras y recargos', 'Overtime and surcharges'),
+        IncomeKind.commission => _t('Comisiones', 'Commissions'),
+        IncomeKind.salaryBonus => _t('Bonificación por metas', 'Performance bonus'),
+        IncomeKind.transport => _t('Auxilio de transporte', 'Transport allowance'),
+        IncomeKind.connectivity => _t('Auxilio de conectividad (internet)', 'Connectivity allowance (internet)'),
+        IncomeKind.nonSalaryBonus => _t('Bonificación no salarial', 'Non-salary bonus'),
+        IncomeKind.other => _t('Otro', 'Other'),
+      };
+
+  /// Qué dice la norma colombiana de cada tipo de ingreso.
+  String incomeKindLaw(IncomeKind k) => switch (k) {
+        IncomeKind.overtime => _t(
+            'Constituye salario (Código Sustantivo del Trabajo, art. 127): sí se le descuenta salud y pensión.',
+            'It counts as salary (Colombian Labor Code, art. 127): health and pension are deducted.'),
+        IncomeKind.commission => _t(
+            'Las comisiones remuneran tu trabajo: constituyen salario (CST art. 127) y pagan salud y pensión.',
+            'Commissions pay for your work: they count as salary (Labor Code art. 127) and pay health and pension.'),
+        IncomeKind.salaryBonus => _t(
+            'Si se paga de forma habitual por tu desempeño, constituye salario y paga salud y pensión. '
+                'Si en tu contrato está pactada como NO salarial (CST art. 128), desactívalo.',
+            'If paid regularly for your performance, it counts as salary and pays health and pension. '
+                'If your contract states it is NOT salary (Labor Code art. 128), turn this off.'),
+        IncomeKind.transport => _t(
+            'El auxilio de transporte no es salario: no se le descuenta salud ni pensión.',
+            'The transport allowance is not salary: no health or pension is deducted.'),
+        IncomeKind.connectivity => _t(
+            'El auxilio de conectividad (Ley 2088 de 2021) no es salario: no se le descuenta salud ni pensión.',
+            'The connectivity allowance (Law 2088 of 2021) is not salary: no health or pension is deducted.'),
+        IncomeKind.nonSalaryBonus => _t(
+            'Pactada como no salarial (CST art. 128): no paga salud ni pensión, salvo lo que supere el 40 % '
+                'de todo lo que recibes (Ley 1393 de 2010); Ficonza lo calcula sola.',
+            'Agreed as non-salary (Labor Code art. 128): no health or pension, except what exceeds 40% '
+                'of everything you receive (Law 1393 of 2010); Ficonza calculates it for you.'),
+        IncomeKind.other => _t(
+            'Si el pago remunera directamente tu trabajo, constituye salario y paga salud y pensión. '
+                'Si es un auxilio o un pago pactado como no salarial, desactívalo.',
+            'If the payment directly rewards your work, it counts as salary and pays health and pension. '
+                'If it is an allowance or agreed as non-salary, turn this off.'),
+      };
+
+  String nonSalaryExcessHint(String v) => _t(
+        'Incluye $v de pagos no salariales que superan el 40 % del total (Ley 1393 de 2010).',
+        'Includes $v of non-salary payments above 40% of the total (Law 1393 of 2010).',
+      );
+
+  // ---------- Prestaciones sociales ----------
+  String get moduleBenefits => _t('Prestaciones sociales', 'Employee benefits');
+  String get benefitsIntroTitle => _t('Calcula tus prestaciones sociales', 'Calculate your employee benefits');
+  String get benefitsIntroBody => _t(
+        'Con tu fecha de ingreso y las fechas de tus últimas liquidaciones, Ficonza calcula cuánto llevas acumulado, según la ley colombiana:',
+        'With your hire date and your last settlement dates, Ficonza calculates how much you have accrued, under Colombian law:',
+      );
+  List<String> get benefitsIntroList => [
+        _t('Prima de servicios', 'Service bonus (prima)'),
+        _t('Cesantías', 'Severance (cesantías)'),
+        _t('Intereses de cesantías (12 % anual)', 'Severance interest (12% per year)'),
+        _t('Vacaciones (15 días hábiles por año) y días acumulados', 'Vacation (15 business days per year) and accrued days'),
+      ];
+  String get enterEmploymentData => _t('Ingresar mis datos laborales', 'Enter my employment data');
+  String get benefitsInvite =>
+      _t('Ingresa tu fecha de ingreso y tus últimas liquidaciones.', 'Enter your hire date and last settlements.');
+  String benefitsTotalTo(String date) => _t('Prestaciones acumuladas a hoy, $date', 'Benefits accrued as of today, $date');
+  String benefitsSince(String date) => _t('Trabajas aquí desde el $date', 'Working here since $date');
+  String get benefitsChartTitle => _t('Lo que llevas acumulado', 'What you have accrued');
+  String get editEmploymentData => _t('Editar datos laborales', 'Edit employment data');
+  String get benefitsNoSalary => _t(
+        'Registra tu sueldo en el módulo Ingresos de este mes para calcular las prestaciones.',
+        "Enter this month's salary in the Income module to calculate benefits.",
+      );
+  String get transportOverTwoWages => _t(
+        'Tu salario supera 2 salarios mínimos: por ley no tendrías auxilio de transporte. Revisa tus datos laborales.',
+        'Your salary exceeds 2 minimum wages: by law you would not get the transport allowance. Check your employment data.',
+      );
+  String get benefitsDisclaimer => _t(
+        'Valores aproximados con año comercial de 360 días. Tu empresa puede liquidar con una base distinta (por ejemplo, salario variable de todo el año). Si el salario cambió en los últimos 3 meses, se usa el promedio de los meses registrados (CST art. 253).',
+        'Approximate values using a 360-day commercial year. Your employer may use a different base (e.g. variable salary over the whole year). If the salary changed in the last 3 months, the average of the recorded months is used (Labor Code art. 253).',
+      );
+  String get notApplicable => _t('No aplica', 'Not applicable');
+  String get integralNoBenefit => _t(
+        'Con salario integral no se causan prima, cesantías ni intereses: ya están incluidos en el salario (CST art. 132).',
+        'With an integral salary there is no prima, severance or interest: they are already included in the salary (Labor Code art. 132).',
+      );
+
+  String benefitName(BenefitKind k) => switch (k) {
+        BenefitKind.prima => _t('Prima de servicios', 'Service bonus (prima)'),
+        BenefitKind.cesantias => _t('Cesantías', 'Severance'),
+        BenefitKind.interest => _t('Intereses de cesantías', 'Severance interest'),
+        BenefitKind.vacation => _t('Vacaciones', 'Vacation'),
+      };
+
+  String periodFrom(String date, int days) =>
+      _t('Desde el $date: $days días trabajados (año de 360 días).', 'Since $date: $days days worked (360-day year).');
+  String vacationDaysAccrued(String total, String pending) => _t(
+        'Días de vacaciones acumulados: $total días hábiles (incluye $pending días pendientes).',
+        'Accrued vacation days: $total business days (includes $pending pending days).',
+      );
+  String baseIs(String money, BenefitKind k) => switch (k) {
+        BenefitKind.interest => _t('Cesantías del periodo: $money', 'Severance for the period: $money'),
+        BenefitKind.vacation => _t('Base: sueldo básico de $money (sin horas extras ni auxilio de transporte).',
+            'Base: basic salary of $money (no overtime or transport allowance).'),
+        _ => _t('Base: $money (salario + auxilio de transporte si aplica).', 'Base: $money (salary + transport allowance if applicable).'),
+      };
+  String benefitFormula(BenefitKind k) => switch (k) {
+        BenefitKind.prima => _t('Fórmula: base × días ÷ 360 (CST art. 306). Equivale a 30 días de salario por año.',
+            'Formula: base × days ÷ 360 (Labor Code art. 306). Equals 30 days of salary per year.'),
+        BenefitKind.cesantias => _t('Fórmula: base × días ÷ 360 (CST art. 249). Un mes de salario por año.',
+            'Formula: base × days ÷ 360 (Labor Code art. 249). One month of salary per year.'),
+        BenefitKind.interest => _t('Fórmula: cesantías × días × 12 % ÷ 360 (Ley 52 de 1975).',
+            'Formula: severance × days × 12% ÷ 360 (Law 52 of 1975).'),
+        BenefitKind.vacation => _t('Fórmula: 15 días hábiles por año → días trabajados × 15 ÷ 360; valor = sueldo ÷ 30 × días (CST art. 186).',
+            'Formula: 15 business days per year → days worked × 15 ÷ 360; value = salary ÷ 30 × days (Labor Code art. 186).'),
+      };
+  String benefitPayment(BenefitKind k) => switch (k) {
+        BenefitKind.prima => _t('Se paga en dos partes: a más tardar el 30 de junio y el 20 de diciembre.',
+            'Paid in two parts: no later than June 30 and December 20.'),
+        BenefitKind.cesantias => _t('Se consignan al fondo de cesantías antes del 14 de febrero del año siguiente.',
+            'Deposited into the severance fund before February 14 of the following year.'),
+        BenefitKind.interest => _t('Se pagan directamente a ti antes del 31 de enero del año siguiente.',
+            'Paid directly to you before January 31 of the following year.'),
+        BenefitKind.vacation => _t('Se disfrutan (o se pagan al terminar el contrato). Se pueden acumular hasta 2 años (CST art. 190).',
+            'Taken as time off (or paid when the contract ends). Up to 2 years may be accumulated (Labor Code art. 190).'),
+      };
+
+  // Formulario de datos laborales
+  String get employmentData => _t('Datos laborales', 'Employment data');
+  String get employmentIntro => _t(
+        'Con estos datos se calculan tus prestaciones. Te sugerimos las fechas de los últimos cortes legales; cámbialas si tu empresa te liquidó en otra fecha.',
+        'These data are used to calculate your benefits. We suggest the last legal cut-off dates; change them if your employer settled on another date.',
+      );
+  String get hireDate => _t('Fecha de ingreso a la empresa', 'Hire date');
+  String get hireDateRequired => _t('Elige tu fecha de ingreso', 'Choose your hire date');
+  String get tapToChoose => _t('Toca para elegir', 'Tap to choose');
+  String get integralSalary => _t('Tengo salario integral', 'I have an integral salary');
+  String get integralSalaryHint => _t(
+        'Mínimo 13 salarios mínimos; ya incluye prima, cesantías e intereses.',
+        'At least 13 minimum wages; already includes prima, severance and interest.',
+      );
+  String get receivesTransport => _t('Recibo auxilio de transporte', 'I receive the transport allowance');
+  String get receivesTransportHint => _t(
+        'Solo si ganas hasta 2 salarios mínimos. Suma a la base de prima y cesantías.',
+        'Only if you earn up to 2 minimum wages. It adds to the prima and severance base.',
+      );
+  String get transportValue => _t('Auxilio de transporte mensual', 'Monthly transport allowance');
+  String get sinceHire => _t('Nunca (desde que ingresé)', 'Never (since I was hired)');
+  String get primaPaidUntil => _t('Última prima liquidada hasta', 'Last prima settled up to');
+  String get primaPaidUntilHelp => _t(
+        'La prima se liquida por semestre: hasta el 30 de junio o el 31 de diciembre.',
+        'The prima is settled per semester: up to June 30 or December 31.',
+      );
+  String get cesantiasPaidUntil => _t('Cesantías liquidadas hasta', 'Severance settled up to');
+  String get cesantiasPaidUntilHelp => _t(
+        'Normalmente hasta el 31 de diciembre del año pasado. Si te hicieron un retiro parcial o liquidación, pon esa fecha.',
+        'Usually up to December 31 of last year. If you had a partial withdrawal or settlement, use that date.',
+      );
+  String get interestPaidUntil => _t('Intereses de cesantías pagados hasta', 'Severance interest paid up to');
+  String get interestPaidUntilHelp => _t(
+        'Normalmente hasta el 31 de diciembre del año pasado (te los pagan en enero).',
+        'Usually up to December 31 of last year (paid to you in January).',
+      );
+  String get vacationUntil => _t('Vacaciones disfrutadas hasta', 'Vacation taken up to');
+  String get vacationUntilHelp => _t(
+        'La fecha hasta la que ya disfrutaste (o te pagaron) vacaciones. Desde ahí se cuentan 15 días hábiles por año.',
+        'The date up to which you already took (or were paid) vacation. From there, 15 business days per year accrue.',
+      );
+  String get neverTookVacation => _t('Nunca he salido a vacaciones', 'I have never taken vacation');
+  String get pendingVacationDays => _t('Días de vacaciones pendientes', 'Pending vacation days');
+  String get pendingVacationDaysHelp => _t(
+        'Días que te quedaron sin disfrutar a esa fecha (por ejemplo, si saliste solo 10 de 15). Se suman a los nuevos.',
+        'Days you had left at that date (e.g. if you took only 10 of 15). They are added to the new ones.',
+      );
+  String get daysSuffix => _t('días', 'days');
+  String get legalValues => _t('Valores legales', 'Legal values');
+  String get legalValuesHint => _t('Salario mínimo 2026', '2026 minimum wage');
+  String get minimumWage => _t('Salario mínimo (SMMLV)', 'Minimum wage');
+
   // ---------- Editor ----------
   String newEntryIn(String module) => _t('Nuevo en $module', 'New in $module');
   String get editEntry => _t('Editar', 'Edit');
   String get conceptRequired => _t('Escribe el concepto', 'Enter the concept');
   String get addDate => _t('Agregar fecha', 'Add date');
   String get appliesHealth => _t('Se le descuenta salud y pensión', 'Health and pension are deducted');
-  String get appliesHealthHint =>
-      _t('Desactívalo para auxilios no salariales (por ejemplo, internet)', 'Turn off for non-salary allowances (e.g. internet)');
+  String get appliesHealthHint => _t(
+        'Sí para lo que es salario (sueldo, horas extras, comisiones). No para auxilios de transporte o conectividad y pagos pactados como no salariales.',
+        'Yes for salary (base pay, overtime, commissions). No for transport or connectivity allowances and payments agreed as non-salary.',
+      );
   String get noHealthShort => _t('sin salud y pensión', 'no health/pension');
   String get paid => _t('Ya está pagado', 'Already paid');
   String get noteOptional => _t('Nota (opcional)', 'Note (optional)');

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../l10n/strings.dart';
+import '../models/benefits.dart';
 import '../models/finance.dart';
 import 'finance_db.dart';
 
@@ -32,6 +33,9 @@ class FinanceStore extends ChangeNotifier {
   List<Entry> entries = const [];
   List<SavingsFund> funds = const [];
   Map<int, double> _movements = const {};
+
+  /// Datos laborales para las prestaciones sociales (null = sin configurar).
+  EmploymentInfo? employment;
 
   /// Mes creado más reciente antes del actual (para copiar sus conceptos).
   String? previousMonth;
@@ -89,6 +93,7 @@ class FinanceStore extends ChangeNotifier {
     entries = await db.entries(month: id);
     funds = await db.funds();
     _movements = await db.fundMovements(id);
+    employment = EmploymentInfo.decode(await db.setting(FinanceDb.employmentKey));
     final created = await db.months();
     previousMonth = created.where((m) => m.compareTo(id) < 0).firstOrNull;
     loading = false;
@@ -115,13 +120,7 @@ class FinanceStore extends ChangeNotifier {
       }
     } else if (prev == null && (await db.months()).isEmpty) {
       final s = S.current;
-      toInsert.addAll([
-        Entry(month: month, module: FinanceModule.income, concept: s.seedBaseSalary, amount: 0, position: 0),
-        Entry(month: month, module: FinanceModule.income, concept: s.seedGoalsBonus, amount: 0, position: 1),
-        // El auxilio de internet no es salarial: no se le descuenta salud y pensión.
-        Entry(month: month, module: FinanceModule.income, concept: s.seedInternetAllowance, amount: 0, appliesHealth: false, position: 2),
-        Entry(month: month, module: FinanceModule.income, concept: s.seedStandbyBonus, amount: 0, position: 3),
-      ]);
+      // Los ingresos los pide el asistente del módulo Ingresos (sueldo base y adicionales).
       // El ahorro vacacional de la hoja: un ahorro descontado del salario.
       if ((await db.funds()).isEmpty) {
         final fundId = await db.insertFund(SavingsFund(name: s.seedVacationSavings));
@@ -158,6 +157,25 @@ class FinanceStore extends ChangeNotifier {
   /// "Deshacer" después de borrar: vuelve a insertar el renglón en su posición.
   Future<void> undoDelete(Entry entry) async {
     await db.insert(entry.withoutId());
+    await _reload();
+  }
+
+  /// Guarda lo respondido en el asistente de ingresos: el sueldo base y los
+  /// ingresos adicionales. Si ya existe un renglón con el nombre del sueldo base,
+  /// se actualiza en lugar de duplicarlo.
+  Future<void> saveIncomeSetup(double baseSalary, List<Entry> extras) async {
+    if (!monthExists) await db.createMonth(month, healthPercent);
+    final name = S.current.seedBaseSalary;
+    final existing = of(FinanceModule.income).where((e) => e.concept.toLowerCase() == name.toLowerCase()).firstOrNull;
+    if (existing != null) {
+      await db.update(existing.copyWith(amount: baseSalary, appliesHealth: true));
+    } else {
+      await db.insert(Entry(month: month, module: FinanceModule.income, concept: name, amount: baseSalary, position: 0));
+    }
+    var position = of(FinanceModule.income).length + 1;
+    for (final e in extras) {
+      await db.insert(e.copyWith(month: month, position: position++).withoutId());
+    }
     await _reload();
   }
 
@@ -222,6 +240,26 @@ class FinanceStore extends ChangeNotifier {
     return list.reversed.toList();
   }
 
+  // ---------- Prestaciones sociales ----------
+
+  Future<void> saveEmployment(EmploymentInfo info) async {
+    await db.setSetting(FinanceDb.employmentKey, info.encode());
+    await _reload();
+  }
+
+  /// Sueldo básico del mes (el renglón "Sueldo base"); si no hay, todo lo salarial.
+  double get basicSalary {
+    final name = S.current.seedBaseSalary.toLowerCase();
+    final base = of(FinanceModule.income).where((e) => e.concept.toLowerCase() == name).firstOrNull;
+    return base?.amount ?? summary.salaryIncome;
+  }
+
+  /// Ingresos salariales de cada mes registrado (para promediar el salario variable).
+  Future<Map<String, double>> salaryByMonth() async {
+    final list = await summaries();
+    return {for (final m in list) m.month: m.salaryIncome};
+  }
+
   // ---------- Consolidado ----------
 
   /// Totales de cada mes creado entre [from] y [to] (inclusive), en orden.
@@ -245,8 +283,9 @@ class FinanceStore extends ChangeNotifier {
     List<Map<String, Object?>> months,
     List<Map<String, Object?>> entries,
     List<Map<String, Object?>> funds,
+    List<Map<String, Object?>> settings,
   ) async {
-    await db.restore(months, entries, funds: funds);
+    await db.restore(months, entries, funds: funds, settings: settings);
     await _reload();
   }
 }

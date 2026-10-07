@@ -3,21 +3,34 @@ import 'package:flutter/material.dart';
 import '../l10n/strings.dart';
 import '../models/finance.dart';
 import '../services/finance_store.dart';
+import '../services/preferences_service.dart';
 import '../utils/money.dart';
 import '../widgets/entry_editor.dart';
+import '../widgets/income_setup.dart';
 
 /// Un módulo (una tabla de la hoja): sus renglones, agregar, editar, borrar,
 /// reordenar y el total. Deducciones muestra además la salud y pensión calculada
 /// y los ahorros que descuentan del salario. La barra superior (nombre del
 /// módulo y mes) la pone ShellScreen.
 class ModulePage extends StatelessWidget {
-  const ModulePage({super.key, required this.store, required this.module, required this.onOpenSavings});
+  const ModulePage({
+    super.key,
+    required this.store,
+    required this.preferences,
+    required this.module,
+    required this.onOpenSavings,
+    required this.onOpenBenefits,
+  });
 
   final FinanceStore store;
+  final PreferencesService preferences;
   final FinanceModule module;
 
   /// Ir al módulo Ahorros (desde Deducciones).
   final VoidCallback onOpenSavings;
+
+  /// Ir al módulo Prestaciones sociales (desde Ingresos).
+  final VoidCallback onOpenBenefits;
 
   Future<void> _add(BuildContext context) async {
     final entry = await showEntryEditor(
@@ -75,9 +88,17 @@ class ModulePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = S.of(context);
     return ListenableBuilder(
-      listenable: store,
+      listenable: Listenable.merge([store, preferences]),
       builder: (context, _) {
         final list = store.of(module);
+        // Primera vez en Ingresos: el asistente pregunta el sueldo base y los adicionales.
+        if (module == FinanceModule.income && !preferences.incomeSetupDone) {
+          if (list.every((e) => e.amount == 0)) {
+            return IncomeSetup(store: store, preferences: preferences);
+          }
+          // Ya tenía ingresos escritos (versión anterior): no hace falta preguntar.
+          WidgetsBinding.instance.addPostFrameCallback((_) => preferences.setIncomeSetupDone(true));
+        }
         final summary = store.summary;
         final total = list.fold(0.0, (a, e) => a + e.amount);
         final isDeduction = module == FinanceModule.deduction;
@@ -95,6 +116,20 @@ class ModulePage extends StatelessWidget {
           ),
           body: CustomScrollView(
             slivers: [
+              // Ingresos: invita a calcular las prestaciones si faltan los datos laborales.
+              if (module == FinanceModule.income && store.employment == null)
+                SliverToBoxAdapter(
+                  child: Card(
+                    margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                    child: ListTile(
+                      leading: Icon(Icons.work_history_rounded, color: Theme.of(context).colorScheme.primary),
+                      title: Text(s.benefitsIntroTitle),
+                      subtitle: Text(s.benefitsInvite),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: onOpenBenefits,
+                    ),
+                  ),
+                ),
               if (isDeduction)
                 SliverToBoxAdapter(
                   child: Card(
@@ -102,7 +137,11 @@ class ModulePage extends StatelessWidget {
                     child: ListTile(
                       leading: const Icon(Icons.health_and_safety_rounded),
                       title: Text(s.healthPension(_pct(store.healthPercent))),
-                      subtitle: Text(s.healthPensionHint(Money.format(summary.healthBase))),
+                      subtitle: Text([
+                        s.healthPensionHint(Money.format(summary.healthBase)),
+                        if (summary.nonSalaryExcess > 0) s.nonSalaryExcessHint(Money.format(summary.nonSalaryExcess)),
+                      ].join('\n')),
+                      isThreeLine: summary.nonSalaryExcess > 0,
                       trailing: Text(Money.format(summary.health, dashZero: true),
                           style: const TextStyle(fontWeight: FontWeight.w700)),
                       onTap: () => _editPercent(context),

@@ -8,6 +8,7 @@ class PreferencesService extends ChangeNotifier {
   static const _themeKey = 'theme_mode';
   static const _languageKey = 'language';
   static const _currencyKey = 'currency';
+  static const _incomeSetupKey = 'income_setup_done';
 
   SharedPreferences? _prefs;
   ThemeMode _themeMode = ThemeMode.system;
@@ -22,6 +23,7 @@ class PreferencesService extends ChangeNotifier {
       orElse: () => ThemeMode.system,
     );
     _language = _prefs!.getString(_languageKey);
+    _incomeSetupDone = _prefs!.getBool(_incomeSetupKey) ?? false;
     Money.currency = Currency.values.firstWhere(
       (c) => c.name == _prefs!.getString(_currencyKey),
       orElse: () => Currency.cop,
@@ -54,6 +56,19 @@ class PreferencesService extends ChangeNotifier {
     } else {
       await _prefs?.setString(_languageKey, code);
     }
+  }
+
+  // ---------- Configuración inicial de ingresos ----------
+
+  bool _incomeSetupDone = false;
+
+  /// Ya respondió "¿cuál es tu sueldo base?" y los ingresos adicionales (solo se pregunta una vez).
+  bool get incomeSetupDone => _incomeSetupDone;
+
+  Future<void> setIncomeSetupDone(bool value) async {
+    _incomeSetupDone = value;
+    notifyListeners();
+    await _prefs?.setBool(_incomeSetupKey, value);
   }
 
   // ---------- Moneda ----------

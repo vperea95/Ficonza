@@ -10,6 +10,7 @@ Se construye con la misma forma de trabajo que Vixago Player (`C:\Users\ANDRES\D
 - El usuario trabaja en Windows, con `cmd`, en la carpeta `C:\Users\ANDRES\Documents\proyectos de apps\Ficonza`.
 - **No tiene Flutter, Java ni Android SDK instalados localmente.** El APK se compila en GitHub Actions al hacer push a `main`. No proponer `flutter run` local.
 - Pasos manuales (git, GitHub, instalar en el celular) **uno a la vez** y en lenguaje simple.
+- **Pedir autorización al usuario antes de hacer commit/push al repositorio** (lo pidió expresamente). Preparar los cambios en local y preguntar.
 - Para publicar cambios: `git add .`, `git commit -m "mensaje"`, `git push`.
 
 ## Cómo se compila
@@ -24,7 +25,11 @@ El repositorio **no contiene** `android/` ni `ios/`. El workflow `.github/workfl
 6. `flutter build apk --release --split-per-abi --target-platform android-arm,android-arm64` (salida en `build.log`) y sube ambos APK en el artifact `ficonza-apk`. **El que sirve para casi todos los celulares es `app-arm64-v8a-release.apk`.**
 7. Si la compilación falla, el paso "Mostrar errores" publica los errores como anotaciones, que se leen sin iniciar sesión en `https://api.github.com/repos/<usuario>/<repo>/check-runs/<id del job>/annotations`.
 
-El APK se firma con la llave debug de cada compilación: hay que desinstalar la versión anterior antes de instalar una nueva.
+**Firma fija (Vixago).** La llave está FUERA del repositorio en `C:\Users\ANDRES\Documents\proyectos de apps\_firma-vixago\` (`vixago-release.p12`, PKCS12, alias `vixago`; contraseña y huella en `LEEME.txt`; `firma-base64.txt` para el secreto). Es la misma llave para todas las apps de Vixago. **Nunca subirla ni copiar la contraseña al repositorio.** El workflow:
+- "Preparar firma fija": si existe el secreto `SIGNING_KEYSTORE_BASE64`, lo decodifica a `$RUNNER_TEMP/firma.p12`, exporta `SIGNING_KEYSTORE_PATH` y ejecuta `plataforma/android/configurar_firma.py`, que agrega `signingConfigs { create("vixago") }` y cambia el release de `debug` a `vixago` en `build.gradle.kts`. La contraseña llega en el secreto `SIGNING_KEYSTORE_PASSWORD` (variable de entorno del paso "Compilar APK").
+- Sin los secretos, compila con la llave debug y deja un aviso (hay que desinstalar antes de cada versión).
+- "Verificar firma" publica una anotación con el titular del certificado (debe decir CN=Vixago).
+Con la firma fija, cada APK nuevo se instala encima del anterior sin perder datos. La primera vez que se pasa de la llave debug a la de Vixago sí hay que desinstalar una última vez.
 
 ## Stack
 
@@ -61,27 +66,45 @@ lib/
   widgets/summary_table.dart         SummaryTable (Resumen final) y MonthSelector
   widgets/start_month_card.dart      Mes sin empezar: copiar del anterior o empezar en blanco
   widgets/amount_dialog.dart         askAmount(): diálogo para escribir un valor
+  widgets/income_setup.dart          Asistente de Ingresos (primera vez): sueldo base -> ¿ingresos adicionales? -> lista con tipo y salud/pensión
+  models/benefits.dart               EmploymentInfo (datos laborales, JSON en settings), BenefitsCalculator (prima, cesantías, intereses, vacaciones), days360
+  screens/benefits_page.dart         Módulo Prestaciones sociales: total a hoy, gráfico de barras (colores de reporte), detalle con fórmula y fecha de pago
+  screens/employment_screen.dart     Formulario de datos laborales con fechas de corte sugeridas
 plataforma/android/MainActivity.kt   Canal 'ficonza/files': "save" (ACTION_CREATE_DOCUMENT) y "open" (ACTION_OPEN_DOCUMENT)
 ```
 
-## Base de datos (ficonza.db, versión 2)
+## Base de datos (ficonza.db, versión 3)
 
 - `months(id TEXT PK "AAAA-MM", health_pct REAL default 8, created_at)`: un mes existe cuando se "empieza".
 - `entries(id, month, module, concept, amount REAL, date, note, applies_health, paid, position, created_at, fund_id)`; `module` es el nombre del enum (`income`, `occasional`, `fixed`, `variable`, `deduction`, `saving` = aporte, `withdrawal` = retiro).
 - `funds(id, name, initial_balance, from_salary, goal, archived, created_at)`: cada ahorro.
+- `settings(key TEXT PK, value TEXT)` (v3): `employment` = JSON de `EmploymentInfo`. Va en la copia de seguridad (formato v3).
 - **Migración 1 -> 2** (`onUpgrade`): agrega `fund_id`, crea `funds` y pasa los renglones de Deducciones cuyo concepto contiene "ahorro"/"saving" a aportes de un fondo con ese nombre (por nómina). Restaurar una copia v1 hace la misma conversión.
 - Si se cambia el esquema: subir `_version` en `FinanceDb` y agregar el paso en `onUpgrade` (no borrar datos del usuario).
 
 ## Fórmulas (MonthSummary)
 
-- Salud y pensión = (suma de ingresos con `applies_health`) × `health_pct` / 100. Por defecto 8 %; editable por mes. El "Auxilio de internet" inicial viene sin salud y pensión (no salarial).
+- Salud y pensión = base (IBC) × `health_pct` / 100. Por defecto 8 % (4 % salud + 4 % pensión del empleado); editable por mes.
+- Base (IBC) = ingresos salariales (`applies_health`) + **excedente no salarial**: lo no salarial que supere el 40 % del total de ingresos (regla del 40 %, Ley 1393 de 2010 art. 30). `MonthSummary.nonSalaryExcess`; en Deducciones se explica cuando aplica. No se calcula el Fondo de Solidaridad Pensional ni el tope mínimo/máximo del IBC.
 - Total deducciones = salud y pensión + otras deducciones (módulo Deducciones) + **aportes a ahorros por nómina** (`from_salary`).
 - **Ingresos netos = ingresos + ocasionales + retiros de ahorros − total deducciones − aportes a ahorros voluntarios.** (Los ocasionales se suman: decisión pendiente de confirmar con el usuario.)
 - Saldo disponible (lo que sobra) = ingresos netos − gastos fijos − gastos variables.
 - Saldo de un ahorro hasta un mes = saldo inicial + aportes − retiros de todos los meses <= ese mes.
 
+## Prestaciones sociales (BenefitsCalculator, a la fecha de hoy)
+
+- Días con año comercial de 360 días (`days360`, ambas fechas incluidas; día 31 y fin de febrero cuentan como 30). Cada periodo empieza el día siguiente a la última liquidación (o en la fecha de ingreso).
+- Base de prima y cesantías = promedio de los ingresos salariales de los meses registrados en el periodo (CST art. 253; si no hay, el del mes visto) + auxilio de transporte si lo recibe (solo hasta 2 SMMLV; aviso si lo supera).
+- Prima (CST art. 306) = base × días / 360. Cesantías (CST art. 249) = base × días / 360. Intereses (Ley 52 de 1975) = cesantías del periodo × días × 12 % / 360.
+- Vacaciones (CST art. 186) = días trabajados desde las últimas vacaciones × 15 / 360 + días pendientes; valor = sueldo básico (renglón "Sueldo base") / 30 × días.
+- Salario integral: prima, cesantías e intereses no aplican (CST art. 132).
+- Valores legales por defecto (2026): SMMLV $1.750.905, auxilio de transporte $249.095 (editables en el formulario).
+- Fechas sugeridas: prima hasta el último 30 de junio / 31 de diciembre; cesantías e intereses hasta el 31 de diciembre del año anterior.
+
 ## Decisiones
 
+- **Asistente de ingresos (pedido del usuario).** La primera vez que se entra a Ingresos (`income_setup_done` en SharedPreferences, falso, y sin ingresos con valor) se muestra `IncomeSetup`: pregunta el sueldo base, luego "¿Tienes ingresos adicionales?" y permite agregarlos eligiendo un `IncomeKind` (en `models/finance.dart`) que sugiere si pagan salud y pensión según la norma colombiana: constituyen salario (CST art. 127) horas extras/recargos, comisiones, bonificación habitual por metas; no constituyen salario (CST art. 128) auxilio de transporte, auxilio de conectividad (Ley 2088 de 2021), bonificación pactada como no salarial. El usuario puede cambiar la sugerencia. Se puede omitir. Si ya había ingresos con valor (datos de versiones anteriores), se marca como hecho sin preguntar. El primer mes ya no crea los ingresos en cero.
+- **Prestaciones (pedido del usuario: "pensar como contador").** Módulo propio (`AppSection.benefits`) con gráfico de barras, que por ser reporte usa colores distintos. En Ingresos aparece una tarjeta que invita a configurarlo mientras falten los datos laborales.
 - **Color uniforme (pedido del usuario).** Módulos, barras, botones, íconos y textos usan un solo color: el azul de la marca (`AppColors.blue`; en modo oscuro el `primary` es #6FA0FF). Barras y botones flotantes van en el tema (`appBarTheme`, `floatingActionButtonTheme`); las tarjetas grandes usan `AppColors.brandGradient`. **Los colores mezclados de cada tabla (`FinanceModule.color`) solo se usan en los reportes**: `report_screen.dart` y el Excel. Única excepción: el rojo de borrar (deslizar y confirmar eliminación).
 - **Navegación (pedido del usuario).** Cada tabla es un módulo en su propia pantalla, elegido desde el menú ☰ (con el total del mes al lado). Arranca en Resumen final; "Atrás" vuelve al Resumen. La barra superior lleva el nombre del módulo y el selector de mes.
 - **Ahorros (pedido del usuario).** Las deducciones de salario que son ahorro deben acumularse: cada fondo tiene saldo inicial, aportes mensuales, retiros y meta opcional. Por nómina = deducción; voluntario = se resta de lo que sobra; retiro = suma a lo disponible del mes. Archivar un fondo lo oculta y deja de copiarse.
@@ -98,4 +121,5 @@ plataforma/android/MainActivity.kt   Canal 'ficonza/files': "save" (ACTION_CREAT
 
 - v0.1.0: base del proyecto (ícono, arranque, idioma, apariencia, pantalla provisional). Repositorio: https://github.com/vperea95/Ficonza (rama `main`). Esperando que el usuario defina los módulos.
 - v0.2.0: los 6 módulos, base de datos, reporte consolidado, Excel y copia de seguridad. Compilada con éxito en Actions al primer intento (06/10/2026). Falta probarla en un celular.
-- v0.3.0: cada módulo en su propia pantalla (menú de módulos), módulo Ahorros acumulativo, color uniforme (mezclados solo en reportes); base de datos v2 con migración. Escrita completa, **sin compilar todavía**.
+- v0.3.0: cada módulo en su propia pantalla (menú de módulos), módulo Ahorros acumulativo, color uniforme (mezclados solo en reportes); base de datos v2 con migración. Compilada con éxito en Actions al primer intento (06/10/2026). Falta probarla en un celular.
+- v0.4.0 (en local, sin subir): firma fija Vixago en el workflow, asistente de ingresos, regla del 40 % y módulo de prestaciones sociales (base de datos v3). Escrita completa, **sin compilar todavía**.

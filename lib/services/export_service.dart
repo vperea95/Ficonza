@@ -21,7 +21,7 @@ class ExportService {
 
   static const _channel = MethodChannel('ficonza/files');
   static const backupFormat = 'ficonza-backup';
-  static const backupVersion = 2;
+  static const backupVersion = 3;
 
   final FinanceStore store;
 
@@ -288,6 +288,7 @@ class ExportService {
       'exportedAt': DateTime.now().toIso8601String(),
       'months': dump['months'],
       'funds': dump['funds'],
+      'settings': dump['settings'],
       'entries': dump['entries'],
     };
     return Uint8List.fromList(utf8.encode(const JsonEncoder.withIndent('  ').convert(json)));
@@ -295,14 +296,18 @@ class ExportService {
 
   /// Lee una copia de seguridad. Devuelve cuántos meses y renglones trae, o null si no es válida.
   /// Las copias de la versión 1 no traen `funds`: al restaurar, el ahorro que estaba en deducciones se convierte.
-  static ({List<Map<String, Object?>> months, List<Map<String, Object?>> entries, List<Map<String, Object?>> funds})?
-      parseBackup(Uint8List bytes) {
+  static ({
+    List<Map<String, Object?>> months,
+    List<Map<String, Object?>> entries,
+    List<Map<String, Object?>> funds,
+    List<Map<String, Object?>> settings,
+  })? parseBackup(Uint8List bytes) {
     try {
       final json = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
       if (json['format'] != backupFormat) return null;
       List<Map<String, Object?>> list(String key) =>
           [for (final m in (json[key] as List? ?? const [])) if (m is Map) Map<String, Object?>.from(m)];
-      return (months: list('months'), entries: list('entries'), funds: list('funds'));
+      return (months: list('months'), entries: list('entries'), funds: list('funds'), settings: list('settings'));
     } catch (e) {
       debugPrint('Copia no válida: $e');
       return null;

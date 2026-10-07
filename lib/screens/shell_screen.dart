@@ -11,6 +11,7 @@ import '../widgets/summary_table.dart';
 import 'export_screen.dart';
 import 'module_page.dart';
 import 'report_screen.dart';
+import 'benefits_page.dart';
 import 'savings_page.dart';
 import 'summary_page.dart';
 
@@ -22,7 +23,8 @@ enum AppSection {
   fixed(Icons.home_work_rounded),
   variable(Icons.shopping_cart_rounded),
   deduction(Icons.remove_circle_outline_rounded),
-  savings(Icons.savings_rounded);
+  savings(Icons.savings_rounded),
+  benefits(Icons.work_history_rounded);
 
   const AppSection(this.icon);
   final IconData icon;
@@ -34,7 +36,7 @@ enum AppSection {
         AppSection.fixed => FinanceModule.fixed,
         AppSection.variable => FinanceModule.variable,
         AppSection.deduction => FinanceModule.deduction,
-        AppSection.summary || AppSection.savings => null,
+        AppSection.summary || AppSection.savings || AppSection.benefits => null,
       };
 }
 
@@ -60,11 +62,12 @@ class _ShellScreenState extends State<ShellScreen> {
   String _title(S s, AppSection section) => switch (section) {
         AppSection.summary => s.finalSummary,
         AppSection.savings => s.moduleSavings,
+        AppSection.benefits => s.moduleBenefits,
         _ => s.moduleName(section.module!),
       };
 
-  /// Total que se muestra junto a cada módulo en el menú.
-  double _total(AppSection section) {
+  /// Total que se muestra junto a cada módulo en el menú (null = no se muestra).
+  double? _total(AppSection section) {
     final m = store.summary;
     return switch (section) {
       AppSection.summary => m.balance,
@@ -74,6 +77,7 @@ class _ShellScreenState extends State<ShellScreen> {
       AppSection.variable => m.variable,
       AppSection.deduction => m.totalDeductions,
       AppSection.savings => store.totalSaved,
+      AppSection.benefits => null,
     };
   }
 
@@ -139,12 +143,15 @@ class _ShellScreenState extends State<ShellScreen> {
       return ModulePage(
         key: ValueKey(module),
         store: store,
+        preferences: widget.preferences,
         module: module,
         onOpenSavings: () => _go(AppSection.savings),
+        onOpenBenefits: () => _go(AppSection.benefits),
       );
     }
     return switch (_section) {
       AppSection.savings => SavingsPage(store: store),
+      AppSection.benefits => BenefitsPage(store: store),
       _ => SummaryPage(store: store, onOpenSavings: () => _go(AppSection.savings)),
     };
   }
@@ -165,7 +172,7 @@ class _ModulesDrawer extends StatelessWidget {
   final FinanceStore store;
   final AppSection selected;
   final String Function(AppSection) titleOf;
-  final double Function(AppSection) totalOf;
+  final double? Function(AppSection) totalOf;
   final ValueChanged<AppSection> onSelect;
 
   String _themeLabel(S s, ThemeMode mode) => switch (mode) {
@@ -243,8 +250,8 @@ class _ModulesDrawer extends StatelessWidget {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                   leading: Icon(section.icon, color: scheme.primary),
                   title: Text(titleOf(section), style: const TextStyle(fontWeight: FontWeight.w600)),
-                  trailing: store.monthExists
-                      ? Text(Money.format(totalOf(section), dashZero: true),
+                  trailing: store.monthExists && totalOf(section) != null
+                      ? Text(Money.format(totalOf(section)!, dashZero: true),
                           style: TextStyle(fontWeight: FontWeight.w700, color: scheme.primary))
                       : null,
                   onTap: () => onSelect(section),
@@ -317,7 +324,7 @@ class _ModulesDrawer extends StatelessWidget {
                 showAboutDialog(
                   context: context,
                   applicationName: 'Ficonza',
-                  applicationVersion: '0.3.0',
+                  applicationVersion: '0.4.0',
                   applicationIcon: const AppLogo(size: 56),
                   applicationLegalese: s.legalese,
                   children: [
@@ -329,7 +336,7 @@ class _ModulesDrawer extends StatelessWidget {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
-              child: Text('Ficonza 0.3.0', style: muted),
+              child: Text('Ficonza 0.4.0', style: muted),
             ),
           ],
         ),

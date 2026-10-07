@@ -111,7 +111,7 @@ class _ExportScreenState extends State<ExportScreen> {
     );
     if (ok != true) return;
     await _run(() async {
-      await widget.store.restore(backup.months, backup.entries, backup.funds);
+      await widget.store.restore(backup.months, backup.entries, backup.funds, backup.settings);
       _snack(s.restored);
     });
   }

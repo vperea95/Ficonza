@@ -11,10 +11,14 @@ import '../models/finance.dart';
 ///   Los aportes (`saving`) y retiros (`withdrawal`) de ahorros llevan `fund_id`.
 /// - `funds`: los ahorros que se acumulan (nombre, saldo inicial, si es por nómina, meta).
 ///
+/// - `settings`: configuración guardada como clave/valor (por ejemplo, los datos
+///   laborales para las prestaciones sociales, en JSON).
+///
 /// Versiones: 1 = months + entries. 2 = funds + entries.fund_id (y se pasan los
-/// renglones "Ahorro…" de Deducciones al módulo Ahorros).
+/// renglones "Ahorro…" de Deducciones al módulo Ahorros). 3 = settings.
 class FinanceDb {
-  static const _version = 2;
+  static const employmentKey = 'employment';
+  static const _version = 3;
   Database? _db;
 
   Database get db => _db!;
@@ -48,6 +52,7 @@ class FinanceDb {
           )''');
         await db.execute('CREATE INDEX idx_entries_month ON entries(month, module)');
         await _createFunds(db);
+        await _createSettings(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -55,9 +60,21 @@ class FinanceDb {
           await _createFunds(db);
           await _moveSavingsOutOfDeductions(db);
         }
+        if (oldVersion < 3) await _createSettings(db);
       },
     );
   }
+
+  static Future<void> _createSettings(Database db) =>
+      db.execute('CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+
+  Future<String?> setting(String key) async {
+    final rows = await db.query('settings', where: 'key = ?', whereArgs: [key]);
+    return rows.isEmpty ? null : '${rows.first['value']}';
+  }
+
+  Future<void> setSetting(String key, String value) =>
+      db.insert('settings', {'key': key, 'value': value}, conflictAlgorithm: ConflictAlgorithm.replace);
 
   static Future<void> _createFunds(Database db) => db.execute('''
         CREATE TABLE funds (
@@ -200,6 +217,7 @@ class FinanceDb {
   Future<Map<String, List<Map<String, Object?>>>> dump() async => {
         'months': await db.query('months', orderBy: 'id'),
         'funds': await db.query('funds', orderBy: 'id'),
+        'settings': await db.query('settings', orderBy: 'key'),
         'entries': await db.query('entries', orderBy: 'month, module, position, id'),
       };
 
@@ -208,12 +226,17 @@ class FinanceDb {
     List<Map<String, Object?>> months,
     List<Map<String, Object?>> entries, {
     List<Map<String, Object?>> funds = const [],
+    List<Map<String, Object?>> settings = const [],
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     await db.transaction((txn) async {
       await txn.delete('entries');
       await txn.delete('funds');
       await txn.delete('months');
+      await txn.delete('settings');
+      for (final row in settings) {
+        await txn.insert('settings', {'key': '${row['key']}', 'value': '${row['value'] ?? ''}'});
+      }
       for (final m in months) {
         await txn.insert('months', {
           'id': '${m['id']}',
