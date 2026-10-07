@@ -40,17 +40,30 @@ jobs:
 
       # Firma fija con la llave de Vixago (secretos del repositorio). Así cada APK nuevo
       # se instala encima del anterior sin borrar los datos. Sin secretos, usa la llave de prueba.
+      # Antes de compilar se prueba que la contraseña abra la llave; si no, se compila con la
+      # llave de prueba y se deja un aviso (así siempre sale un APK).
       - name: Preparar firma fija
         env:
           SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          SIGNING_PASSWORD_RAW: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
         run: |
-          if [ -n "$SIGNING_KEYSTORE_BASE64" ]; then
-            echo "$SIGNING_KEYSTORE_BASE64" | tr -d '\r\n ' | base64 -d > "$RUNNER_TEMP/firma.p12"
-            echo "SIGNING_KEYSTORE_PATH=$RUNNER_TEMP/firma.p12" >> "$GITHUB_ENV"
-            SIGNING_KEYSTORE_PATH="$RUNNER_TEMP/firma.p12" python3 plataforma/android/configurar_firma.py android/app
-          else
-            echo "::warning title=Sin firma fija::Faltan los secretos SIGNING_KEYSTORE_BASE64 y SIGNING_KEYSTORE_PASSWORD. Se usa la llave de prueba: hay que desinstalar antes de instalar cada versión."
+          # Quita espacios o saltos de línea que se hayan pegado sin querer en el secreto.
+          PW=$(printf '%s' "$SIGNING_PASSWORD_RAW" | tr -d '[:space:]')
+          if [ -z "$SIGNING_KEYSTORE_BASE64" ] || [ -z "$PW" ]; then
+            echo "::warning title=Sin firma fija::Falta el secreto SIGNING_KEYSTORE_BASE64 o SIGNING_KEYSTORE_PASSWORD. Se usa la llave de prueba: hay que desinstalar antes de instalar."
+            exit 0
           fi
+          echo "::add-mask::$PW"
+          printf '%s' "$SIGNING_KEYSTORE_BASE64" | tr -d '\r\n ' | base64 -d > "$RUNNER_TEMP/firma.p12"
+          if ! ERR=$(keytool -list -keystore "$RUNNER_TEMP/firma.p12" -storetype PKCS12 -storepass "$PW" -alias vixago 2>&1); then
+            ERR=$(printf '%s' "$ERR" | head -2 | tr '\n' ' ')
+            echo "::warning title=Firma fija no disponible::La llave no abrió con la contraseña del secreto SIGNING_KEYSTORE_PASSWORD (largo recibido: ${#PW} caracteres). keytool dice: $ERR. Se usa la llave de prueba."
+            exit 0
+          fi
+          echo "SIGNING_KEYSTORE_PATH=$RUNNER_TEMP/firma.p12" >> "$GITHUB_ENV"
+          echo "SIGNING_KEYSTORE_PASSWORD=$PW" >> "$GITHUB_ENV"
+          SIGNING_KEYSTORE_PATH="$RUNNER_TEMP/firma.p12" python3 plataforma/android/configurar_firma.py android/app
+          echo "::notice title=Firma fija::La llave de Vixago abrió correctamente."
 
       - name: Instalar dependencias
         run: flutter pub get || flutter pub upgrade --major-versions
@@ -61,8 +74,6 @@ jobs:
           dart run flutter_native_splash:create
 
       - name: Compilar APK
-        env:
-          SIGNING_KEYSTORE_PASSWORD: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
         run: |
           set -o pipefail
           flutter build apk --release --split-per-abi --target-platform android-arm,android-arm64 2>&1 | tee build.log
