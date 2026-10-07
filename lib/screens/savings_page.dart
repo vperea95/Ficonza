@@ -164,7 +164,26 @@ class _FundCard extends StatelessWidget {
       hint: s.depositHint(s.monthLabel(store.month)),
       initial: status.depositThisMonth,
     );
-    if (value != null) await store.setFundMove(status.fund, FinanceModule.saving, value);
+    if (value == null || value == status.depositThisMonth) return;
+    var forward = false;
+    final deposit = store.of(FinanceModule.saving).where((e) => e.fundId == status.fund.id).firstOrNull;
+    final later = deposit == null ? 0 : await store.laterMonthsWith(deposit);
+    if (later > 0 && context.mounted) {
+      final answer = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(s.applyForwardTitle),
+          content: Text(s.applyForwardBody(later)),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(s.onlyThisMonth)),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: Text(s.alsoNextMonths)),
+          ],
+        ),
+      );
+      if (answer == null) return;
+      forward = answer;
+    }
+    await store.setFundMove(status.fund, FinanceModule.saving, value, forward: forward);
   }
 
   Future<void> _withdraw(BuildContext context) async {

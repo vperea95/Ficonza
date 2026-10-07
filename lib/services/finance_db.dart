@@ -167,6 +167,26 @@ class FinanceDb {
 
   Future<void> delete(int id) => db.delete('entries', where: 'id = ?', whereArgs: [id]);
 
+  /// Renglones de los meses posteriores a [month] con el mismo módulo y concepto
+  /// (o el mismo ahorro, si [fundId] no es null).
+  String _forwardWhere(int? fundId) =>
+      fundId != null ? 'module = ? AND fund_id = ? AND month > ?' : 'module = ? AND concept = ? AND month > ?';
+
+  Future<int> countForward(FinanceModule module, String concept, String month, {int? fundId}) async {
+    final rows = await db.query(
+      'entries',
+      columns: ['id'],
+      where: _forwardWhere(fundId),
+      whereArgs: [module.name, fundId ?? concept, month],
+    );
+    return rows.length;
+  }
+
+  /// Aplica el cambio de un renglón fijo a los meses siguientes.
+  Future<void> updateForward(FinanceModule module, String oldConcept, String month, Map<String, Object?> values,
+      {int? fundId}) =>
+      db.update('entries', values, where: _forwardWhere(fundId), whereArgs: [module.name, fundId ?? oldConcept, month]);
+
   Future<void> reorder(List<Entry> ordered) async {
     final batch = db.batch();
     for (var i = 0; i < ordered.length; i++) {

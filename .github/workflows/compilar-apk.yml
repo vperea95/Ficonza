@@ -79,10 +79,12 @@ jobs:
           flutter build apk --release --split-per-abi --target-platform android-arm,android-arm64 2>&1 | tee build.log
 
       # Muestra en el resumen con qué llave quedó firmado (debe decir CN=Vixago).
+      # keytool no lee la firma v2/v3 (la única que se usa con minSdk 24): se usa apksigner del SDK.
       - name: Verificar firma
         run: |
-          OWNER=$(keytool -printcert -jarfile build/app/outputs/flutter-apk/app-arm64-v8a-release.apk | grep -m1 -E "Owner:|Propietario:" || true)
-          echo "::notice title=Firma del APK::$OWNER"
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
+          OWNER=$("$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-arm64-v8a-release.apk 2>&1 | grep -m1 "certificate DN" || true)
+          echo "::notice title=Firma del APK::${OWNER:-No se pudo leer la firma}"
 
       # Si falla, publica los errores como anotaciones (se ven en el resumen sin iniciar sesión).
       - name: Mostrar errores

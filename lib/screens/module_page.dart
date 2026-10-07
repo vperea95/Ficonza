@@ -6,7 +6,6 @@ import '../services/finance_store.dart';
 import '../services/preferences_service.dart';
 import '../utils/money.dart';
 import '../widgets/entry_editor.dart';
-import '../widgets/income_setup.dart';
 
 /// Un módulo (una tabla de la hoja): sus renglones, agregar, editar, borrar,
 /// reordenar y el total. Deducciones muestra además la salud y pensión calculada
@@ -42,7 +41,29 @@ class ModulePage extends StatelessWidget {
 
   Future<void> _edit(BuildContext context, Entry e) async {
     final entry = await showEntryEditor(context, e);
-    if (entry != null) await store.save(entry);
+    if (entry == null) return;
+    final changed = entry.amount != e.amount || entry.concept != e.concept || entry.appliesHealth != e.appliesHealth;
+    final later = changed ? await store.laterMonthsWith(e) : 0;
+    if (later > 0 && context.mounted) {
+      final s = S.of(context);
+      final forward = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(s.applyForwardTitle),
+          content: Text(s.applyForwardBody(later)),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(s.onlyThisMonth)),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: Text(s.alsoNextMonths)),
+          ],
+        ),
+      );
+      if (forward == null) return;
+      if (forward) {
+        await store.saveForward(e, entry);
+        return;
+      }
+    }
+    await store.save(entry);
   }
 
   Future<void> _delete(BuildContext context, Entry e) async {
@@ -91,14 +112,6 @@ class ModulePage extends StatelessWidget {
       listenable: Listenable.merge([store, preferences]),
       builder: (context, _) {
         final list = store.of(module);
-        // Primera vez en Ingresos: el asistente pregunta el sueldo base y los adicionales.
-        if (module == FinanceModule.income && !preferences.incomeSetupDone) {
-          if (list.every((e) => e.amount == 0)) {
-            return IncomeSetup(store: store, preferences: preferences);
-          }
-          // Ya tenía ingresos escritos (versión anterior): no hace falta preguntar.
-          WidgetsBinding.instance.addPostFrameCallback((_) => preferences.setIncomeSetupDone(true));
-        }
         final summary = store.summary;
         final total = list.fold(0.0, (a, e) => a + e.amount);
         final isDeduction = module == FinanceModule.deduction;

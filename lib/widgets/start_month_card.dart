@@ -13,7 +13,8 @@ class StartMonthCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
-    final prev = store.previousMonth;
+    // Solo se ve cuando no hay un mes anterior del cual tomar los conceptos fijos
+    // (los meses siguientes se crean solos). Puede ser antes del primer mes registrado.
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
@@ -29,29 +30,14 @@ class StartMonthCard extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 8),
-                Text(prev != null ? s.startMonthCopyHint(s.monthLabel(prev)) : s.startMonthFirstHint,
-                    textAlign: TextAlign.center),
+                Text(s.startMonthFirstHint, textAlign: TextAlign.center),
                 const SizedBox(height: 20),
-                if (prev != null) ...[
-                  FilledButton.icon(
-                    style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
-                    onPressed: () => store.startMonth(copyPrevious: true),
-                    icon: const Icon(Icons.content_copy_rounded),
-                    label: Text(s.copyFrom(s.monthLabel(prev))),
-                  ),
-                  const SizedBox(height: 8),
-                  OutlinedButton(
-                    style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(50)),
-                    onPressed: () => store.startMonth(copyPrevious: false),
-                    child: Text(s.startEmpty),
-                  ),
-                ] else
-                  FilledButton.icon(
-                    style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
-                    onPressed: () => store.startMonth(copyPrevious: false),
-                    icon: const Icon(Icons.play_arrow_rounded),
-                    label: Text(s.startMonth),
-                  ),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+                  onPressed: store.startMonth,
+                  icon: const Icon(Icons.play_arrow_rounded),
+                  label: Text(s.startMonth),
+                ),
               ],
             ),
           ),

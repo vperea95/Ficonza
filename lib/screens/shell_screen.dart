@@ -6,6 +6,7 @@ import '../services/finance_store.dart';
 import '../services/preferences_service.dart';
 import '../theme.dart';
 import '../utils/money.dart';
+import '../widgets/income_setup.dart';
 import '../widgets/start_month_card.dart';
 import '../widgets/summary_table.dart';
 import 'export_screen.dart';
@@ -137,6 +138,13 @@ class _ShellScreenState extends State<ShellScreen> {
 
   Widget _body() {
     if (store.loading) return const Center(child: CircularProgressIndicator());
+    // Primera vez: configuración inicial (fecha de ingreso, sueldo, adicionales, liquidaciones).
+    if (!widget.preferences.incomeSetupDone) {
+      final hasData = store.previousMonth != null || store.of(FinanceModule.income).any((e) => e.amount > 0);
+      if (!hasData) return IncomeSetup(store: store, preferences: widget.preferences);
+      // Ya tenía datos de una versión anterior: no hace falta preguntar.
+      WidgetsBinding.instance.addPostFrameCallback((_) => widget.preferences.setIncomeSetupDone(true));
+    }
     if (!store.monthExists) return StartMonthCard(store: store);
     final module = _section.module;
     if (module != null) {
@@ -324,7 +332,7 @@ class _ModulesDrawer extends StatelessWidget {
                 showAboutDialog(
                   context: context,
                   applicationName: 'Ficonza',
-                  applicationVersion: '0.4.0',
+                  applicationVersion: '0.5.0',
                   applicationIcon: const AppLogo(size: 56),
                   applicationLegalese: s.legalese,
                   children: [
@@ -336,7 +344,7 @@ class _ModulesDrawer extends StatelessWidget {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
-              child: Text('Ficonza 0.4.0', style: muted),
+              child: Text('Ficonza 0.5.0', style: muted),
             ),
           ],
         ),

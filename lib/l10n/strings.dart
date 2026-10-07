@@ -71,8 +71,8 @@ class S {
         'You can copy the income, fixed expenses, deductions and savings deposits from $prev (variable expenses, occasional income and withdrawals start empty), or start blank.',
       );
   String get startMonthFirstHint => _t(
-        'Luego, en el módulo Ingresos, la app te preguntará tu sueldo base y tus ingresos adicionales. También se creará el ahorro vacacional en el módulo Ahorros.',
-        'Then, in the Income module, the app will ask for your base salary and additional income. Vacation savings will also be created in the Savings module.',
+        'Este mes no tiene un mes anterior del cual tomar tus ingresos y gastos fijos. Empiézalo en blanco; los meses siguientes se crean solos con tus conceptos fijos.',
+        'This month has no previous month to take your fixed income and expenses from. Start it blank; the following months are created automatically with your fixed items.',
       );
   String copyFrom(String prev) => _t('Copiar de $prev', 'Copy from $prev');
   String get startEmpty => _t('Empezar en blanco', 'Start blank');
@@ -420,6 +420,53 @@ class S {
   String get legalValues => _t('Valores legales', 'Legal values');
   String get legalValuesHint => _t('Salario mínimo 2026', '2026 minimum wage');
   String get minimumWage => _t('Salario mínimo (SMMLV)', 'Minimum wage');
+
+  // ---------- Configuración inicial: fecha de ingreso y liquidaciones ----------
+  String get setupHireTitle => _t('¿Cuándo ingresaste a tu trabajo actual?', 'When did you start your current job?');
+  String get setupHireBody => _t(
+        'Con tu fecha de ingreso sabemos qué prestaciones ya te pudieron liquidar (prima, cesantías, intereses, vacaciones) y cuánto llevas acumulado.',
+        'With your hire date we know which benefits may already have been settled (prima, severance, interest, vacation) and how much you have accrued.',
+      );
+  String get chooseDate => _t('Elegir fecha', 'Choose date');
+  String get setupSettlementsTitle => _t('Tus liquidaciones', 'Your settlements');
+  String get setupSettlementsBody => _t(
+        'Como llevas un tiempo en la empresa, cuéntanos qué ya te pagaron. Así el cálculo empieza desde la última liquidación.',
+        'Since you have been at the company for a while, tell us what has already been paid. The calculation starts from the last settlement.',
+      );
+  String get setupNewEmployeeBody => _t(
+        'Como ingresaste hace poco, todavía no te han liquidado prima ni cesantías: se cuentan desde tu fecha de ingreso.',
+        'Since you started recently, no prima or severance has been settled yet: they accrue from your hire date.',
+      );
+  String setupPrimaPaid(String date) =>
+      _t('¿Ya te pagaron la prima del semestre que terminó el $date?', 'Was the prima for the semester ending $date already paid?');
+  String get setupPrimaPaidYes => _t('Sí: se cuenta la prima desde el día siguiente.', 'Yes: the prima accrues from the next day.');
+  String get setupPrimaPaidNo =>
+      _t('No: se cuenta todo lo pendiente desde tu ingreso.', 'No: everything pending since your hire date is counted.');
+  String setupYearPaid(String date) => _t(
+        '¿Ya te liquidaron las cesantías e intereses con corte al $date?',
+        'Were severance and interest already settled as of $date?',
+      );
+  String get setupYearPaidYes => _t(
+        'Sí: las cesantías se consignaron al fondo y los intereses te los pagaron.',
+        'Yes: severance was deposited into the fund and interest was paid to you.',
+      );
+  String get setupYearPaidNo =>
+      _t('No: se cuenta todo lo pendiente desde tu ingreso.', 'No: everything pending since your hire date is counted.');
+  String get setupVacationTitle => _t('¿Hasta cuándo has disfrutado vacaciones?', 'Up to when have you taken vacation?');
+  String get setupSettlementsNote => _t(
+        'Luego puedes ajustar estas fechas en el módulo Prestaciones sociales.',
+        'You can adjust these dates later in the Employee benefits module.',
+      );
+
+  // ---------- Conceptos fijos que se repiten cada mes ----------
+  String get applyForwardTitle => _t('¿Aplicar también a los meses siguientes?', 'Apply to the following months too?');
+  String applyForwardBody(int n) => n == 1
+      ? _t('Este valor también está en 1 mes siguiente. ¿Lo cambiamos allí también?',
+          'This amount is also in 1 following month. Change it there too?')
+      : _t('Este valor también está en $n meses siguientes. ¿Lo cambiamos allí también?',
+          'This amount is also in $n following months. Change it there too?');
+  String get onlyThisMonth => _t('Solo este mes', 'Only this month');
+  String get alsoNextMonths => _t('También los siguientes', 'Following months too');
 
   // ---------- Editor ----------
   String newEntryIn(String module) => _t('Nuevo en $module', 'New in $module');

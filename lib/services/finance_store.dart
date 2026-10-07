@@ -96,16 +96,25 @@ class FinanceStore extends ChangeNotifier {
     employment = EmploymentInfo.decode(await db.setting(FinanceDb.employmentKey));
     final created = await db.months();
     previousMonth = created.where((m) => m.compareTo(id) < 0).firstOrNull;
+    // Los ingresos, gastos fijos, deducciones y aportes a ahorros no cambian cada mes:
+    // si hay un mes anterior, este se crea solo con ellos (sin preguntar "copiar de…").
+    if (!monthExists && previousMonth != null) {
+      await _startMonth(copyPrevious: true);
+      return;
+    }
     loading = false;
     notifyListeners();
   }
 
   Future<void> _reload() => openMonth(month);
 
-  /// Empieza el mes. Con [copyPrevious] copia ingresos, gastos fijos, deducciones y
-  /// aportes a ahorros del mes anterior (ocasionales, variables y retiros cambian cada mes).
-  /// Si es el primer mes de todos, crea los conceptos de la hoja original.
-  Future<void> startMonth({required bool copyPrevious}) async {
+  /// Empieza en blanco un mes que no tiene uno anterior (el primero, o uno antes del primero).
+  /// Si es el primer mes de todos, crea el ahorro vacacional de la hoja original.
+  Future<void> startMonth() => _startMonth(copyPrevious: false);
+
+  /// Con [copyPrevious] copia ingresos, gastos fijos, deducciones y aportes a ahorros
+  /// del mes anterior (ocasionales, variables y retiros cambian cada mes).
+  Future<void> _startMonth({required bool copyPrevious}) async {
     final prev = previousMonth;
     var pct = defaultHealthPercent;
     final toInsert = <Entry>[];
@@ -163,8 +172,9 @@ class FinanceStore extends ChangeNotifier {
   /// Guarda lo respondido en el asistente de ingresos: el sueldo base y los
   /// ingresos adicionales. Si ya existe un renglón con el nombre del sueldo base,
   /// se actualiza en lugar de duplicarlo.
-  Future<void> saveIncomeSetup(double baseSalary, List<Entry> extras) async {
-    if (!monthExists) await db.createMonth(month, healthPercent);
+  Future<void> saveIncomeSetup(double baseSalary, List<Entry> extras, {EmploymentInfo? employment}) async {
+    if (!monthExists) await _startMonth(copyPrevious: false);
+    if (employment != null) await db.setSetting(FinanceDb.employmentKey, employment.encode());
     final name = S.current.seedBaseSalary;
     final existing = of(FinanceModule.income).where((e) => e.concept.toLowerCase() == name.toLowerCase()).firstOrNull;
     if (existing != null) {
@@ -177,6 +187,30 @@ class FinanceStore extends ChangeNotifier {
       await db.insert(e.copyWith(month: month, position: position++).withoutId());
     }
     await _reload();
+  }
+
+  /// Módulos cuyos renglones se repiten cada mes.
+  static const recurring = {FinanceModule.income, FinanceModule.fixed, FinanceModule.deduction, FinanceModule.saving};
+
+  /// Cuántos meses siguientes tienen este mismo renglón (para ofrecer cambiarlos también).
+  Future<int> laterMonthsWith(Entry original) => recurring.contains(original.module)
+      ? db.countForward(original.module, original.concept, month, fundId: original.module == FinanceModule.saving ? original.fundId : null)
+      : Future.value(0);
+
+  /// Guarda el cambio de un renglón fijo y lo aplica también a los meses siguientes.
+  Future<void> saveForward(Entry original, Entry updated) async {
+    await db.updateForward(
+      original.module,
+      original.concept,
+      month,
+      {
+        'concept': updated.concept,
+        'amount': updated.amount,
+        'applies_health': updated.appliesHealth ? 1 : 0,
+      },
+      fundId: original.module == FinanceModule.saving ? original.fundId : null,
+    );
+    await save(updated);
   }
 
   Future<void> togglePaid(Entry entry) => save(entry.copyWith(paid: !entry.paid));
@@ -218,7 +252,11 @@ class FinanceStore extends ChangeNotifier {
   }
 
   /// Aporte o retiro de este mes en un ahorro (reemplaza el que ya hubiera).
-  Future<void> setFundMove(SavingsFund fund, FinanceModule kind, double amount, {String note = ''}) async {
+  /// Con [forward], el aporte se cambia también en los meses siguientes.
+  Future<void> setFundMove(SavingsFund fund, FinanceModule kind, double amount, {String note = '', bool forward = false}) async {
+    if (forward && kind == FinanceModule.saving) {
+      await db.updateForward(kind, fund.name, month, {'amount': amount}, fundId: fund.id);
+    }
     if (!monthExists) await db.createMonth(month, healthPercent);
     final existing = entries.where((e) => e.module == kind && e.fundId == fund.id).toList();
     if (existing.isEmpty) {
