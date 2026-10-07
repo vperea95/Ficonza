@@ -9,7 +9,32 @@ import '../services/finance_store.dart';
 import '../services/preferences_service.dart';
 import '../utils/money.dart';
 
-enum _Step { welcome, hire, salary, extrasQuestion, extraForm, extraMore, prima, year, vacation, integral, summary }
+enum _Step {
+  welcome,
+  hire,
+  salary,
+  extrasQuestion,
+  extraForm,
+  extraMore,
+  changesQuestion,
+  changes,
+  prima,
+  year,
+  vacation,
+  integral,
+  summary,
+}
+
+/// Lo que el usuario responde sobre un ingreso que cambió este año.
+class _ChangeDraft {
+  bool changed = false;
+  final previous = TextEditingController();
+
+  /// Mes (1-12) desde el que gana el valor actual.
+  int since;
+
+  _ChangeDraft(this.since);
+}
 
 /// Configuración inicial a pantalla completa, lo primero que se ve después del logo
 /// cuando se instala la app (sin barra, sin menú, sin módulos). Una pregunta por
@@ -43,6 +68,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   DateTime? _vacationUntil;
   final _pendingDays = TextEditingController();
 
+  /// Cambios de ingresos este año: 0 = sueldo base, 1.. = ingresos adicionales.
+  final Map<int, _ChangeDraft> _changes = {};
+
   // Formulario del ingreso adicional que se está agregando
   IncomeKind? _kind;
   final _extraName = TextEditingController();
@@ -59,12 +87,32 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   bool get _askVacation => _hire != null && !_hire!.isAfter(DateTime(_today.year - 1, _today.month, _today.day));
   bool get _askIntegral => Money.parse(_salary.text) >= 13 * EmploymentInfo.defaultMinimumWage;
 
+  /// Ingresó antes de este mes: sus ingresos pudieron cambiar durante el año.
+  /// (En enero o si ingresó el mes pasado de este año no hay meses anteriores que revisar.)
+  bool get _askChanges =>
+      _hire != null && _hire!.isBefore(DateTime(_today.year, _today.month, 1)) && _firstChangeMonth <= _today.month;
+
+  /// Primer mes que se puede elegir como "desde cuándo gana el valor actual".
+  int get _firstChangeMonth => _hire != null && _hire!.year == _today.year ? _hire!.month + 1 : 2;
+
+  /// Ingresos a revisar: (índice, concepto, valor actual).
+  List<(int, String, double)> get _incomeItems => [
+        (0, S.of(context).seedBaseSalary, Money.parse(_salary.text)),
+        for (var i = 0; i < _extras.length; i++) (i + 1, _extras[i].$1.concept, _extras[i].$1.amount),
+      ];
+
+  _ChangeDraft _draft(int index) =>
+      _changes.putIfAbsent(index, () => _ChangeDraft(_today.month.clamp(_firstChangeMonth, 12)));
+
   @override
   void dispose() {
     _salary.dispose();
     _pendingDays.dispose();
     _extraName.dispose();
     _extraAmount.dispose();
+    for (final d in _changes.values) {
+      d.previous.dispose();
+    }
     super.dispose();
   }
 
@@ -85,8 +133,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     });
   }
 
-  /// Después de los ingresos: las preguntas de liquidaciones que apliquen y el resumen.
-  _Step _afterIncome() => _nextSettlement(from: null);
+  /// Después de los ingresos: si cambiaron este año, luego las liquidaciones y el resumen.
+  _Step _afterIncome() => _askChanges ? _Step.changesQuestion : _nextSettlement(from: null);
 
   _Step _nextSettlement({required _Step? from}) {
     final order = [
@@ -107,7 +155,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         _Step.hire => 0.15,
         _Step.salary => 0.3,
         _Step.extrasQuestion => 0.45,
-        _Step.extraForm || _Step.extraMore => 0.55,
+        _Step.extraForm || _Step.extraMore => 0.5,
+        _Step.changesQuestion || _Step.changes => 0.58,
         _Step.prima => 0.65,
         _Step.year => 0.72,
         _Step.vacation => 0.8,
@@ -193,6 +242,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       interestPaidUntil: cut(_askYear, _yearPaid, _yearClose),
       vacationUntil: _askVacation ? _vacationUntil : null,
       pendingVacationDays: _askVacation ? (double.tryParse(_pendingDays.text.replaceAll(',', '.')) ?? 0) : 0,
+      incomeChanges: [
+        for (final (i, concept, _) in _incomeItems)
+          if (_changes[i] case final d? when d.changed && Money.parse(d.previous.text) > 0)
+            IncomeChange(concept: concept, previousAmount: Money.parse(d.previous.text), since: DateTime(_today.year, d.since)),
+      ],
     );
   }
 
@@ -527,6 +581,28 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ],
         );
 
+      case _Step.changesQuestion:
+        return _yesNo(
+          icon: Icons.trending_up_rounded,
+          title: s.changesQuestion(_today.year),
+          body: s.changesQuestionBody,
+          onAnswer: (yes) {
+            if (!yes) _changes.clear();
+            _goTo(yes ? _Step.changes : _nextSettlement(from: null));
+          },
+        );
+
+      case _Step.changes:
+        return _layout(
+          icon: Icons.trending_up_rounded,
+          title: s.changesTitle,
+          body: s.changesBody,
+          children: [
+            for (final (i, concept, amount) in _incomeItems) _changeCard(theme, s, i, concept, amount),
+          ],
+          actions: [_primary(s.next, () => _goTo(_nextSettlement(from: null)))],
+        );
+
       case _Step.prima:
         return _yesNo(
           icon: Icons.card_giftcard_rounded,
@@ -609,6 +685,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     ),
                   _incomeTile(theme, Icons.payments_rounded, s.seedBaseSalary, Money.parse(_salary.text), true),
                   for (final (e, k) in _extras) _incomeTile(theme, k.icon, e.concept, e.amount, e.appliesHealth),
+                  for (final (i, concept, amount) in _incomeItems)
+                    if (_changes[i] case final d? when d.changed && Money.parse(d.previous.text) > 0)
+                      _answerTile(theme, Icons.trending_up_rounded, concept,
+                          s.changeSummary(Money.format(Money.parse(d.previous.text)), Money.format(amount), s.monthName(d.since))),
                   if (_askPrima)
                     _answerTile(theme, Icons.card_giftcard_rounded, s.benefitName(BenefitKind.prima),
                         _primaPaid ? s.paidUntil(local.formatMediumDate(_primaClose)) : s.pendingSinceHire),
@@ -642,6 +722,65 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         _primary(s.yes, () => onAnswer(true), icon: Icons.check_rounded),
         _secondary(s.no, () => onAnswer(false)),
       ],
+    );
+  }
+
+  /// Tarjeta de un ingreso: ¿cambió este año?, valor anterior y desde qué mes gana el actual.
+  Widget _changeCard(ThemeData theme, S s, int index, String concept, double amount) {
+    final d = _draft(index);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(4, 4, 12, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SwitchListTile(
+              value: d.changed,
+              onChanged: (v) => setState(() => d.changed = v),
+              title: Text(concept, style: const TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: Text(s.currentValueIs(Money.format(amount, dashZero: true))),
+            ),
+            if (d.changed)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 0, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextField(
+                      controller: d.previous,
+                      keyboardType: TextInputType.numberWithOptions(decimal: Money.currency.decimals > 0),
+                      inputFormatters: [MoneyInputFormatter()],
+                      decoration: InputDecoration(
+                        labelText: s.previousValue,
+                        prefixText: '${Money.currency.symbol} ',
+                        border: const OutlineInputBorder(),
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonHideUnderline(
+                      child: InputDecorator(
+                        decoration: InputDecoration(labelText: s.currentValueSince, border: const OutlineInputBorder()),
+                        child: DropdownButton<int>(
+                          value: d.since,
+                          isExpanded: true,
+                          isDense: true,
+                          items: [
+                            for (var m = _firstChangeMonth; m <= _today.month; m++)
+                              DropdownMenuItem(value: m, child: Text('${s.monthName(m)} ${_today.year}')),
+                          ],
+                          onChanged: (m) {
+                            if (m != null) setState(() => d.since = m);
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 

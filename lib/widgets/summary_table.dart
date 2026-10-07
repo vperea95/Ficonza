@@ -76,10 +76,13 @@ class SummaryTable extends StatelessWidget {
 
 /// "< Octubre 2026 >": cambia de mes; tocar el nombre abre un selector.
 class MonthSelector extends StatelessWidget {
-  const MonthSelector({super.key, required this.month, required this.onChanged, this.color});
+  const MonthSelector({super.key, required this.month, required this.onChanged, required this.maxMonth, this.color});
 
   final String month;
   final ValueChanged<String> onChanged;
+
+  /// Último mes permitido (el siguiente al actual).
+  final String maxMonth;
 
   /// Color del texto y las flechas (blanco sobre la barra de color de un módulo).
   final Color? color;
@@ -95,7 +98,10 @@ class MonthSelector extends StatelessWidget {
             children: [
               IconButton(onPressed: () => setState(() => year--), icon: const Icon(Icons.chevron_left_rounded)),
               Expanded(child: Text('$year', textAlign: TextAlign.center)),
-              IconButton(onPressed: () => setState(() => year++), icon: const Icon(Icons.chevron_right_rounded)),
+              IconButton(
+                onPressed: year >= MonthId.year(maxMonth) ? null : () => setState(() => year++),
+                icon: const Icon(Icons.chevron_right_rounded),
+              ),
             ],
           ),
           content: SizedBox(
@@ -107,7 +113,9 @@ class MonthSelector extends StatelessWidget {
               children: [
                 for (var m = 1; m <= 12; m++)
                   TextButton(
-                    onPressed: () => Navigator.pop(dialogContext, MonthId.of(year, m)),
+                    onPressed: MonthId.of(year, m).compareTo(maxMonth) > 0
+                        ? null
+                        : () => Navigator.pop(dialogContext, MonthId.of(year, m)),
                     style: TextButton.styleFrom(
                       backgroundColor: MonthId.of(year, m) == month
                           ? Theme.of(context).colorScheme.primaryContainer
@@ -147,7 +155,7 @@ class MonthSelector extends StatelessWidget {
         IconButton(
           color: color,
           tooltip: s.nextMonth,
-          onPressed: () => onChanged(MonthId.add(month, 1)),
+          onPressed: month.compareTo(maxMonth) >= 0 ? null : () => onChanged(MonthId.add(month, 1)),
           icon: const Icon(Icons.chevron_right_rounded),
         ),
       ],

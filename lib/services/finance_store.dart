@@ -78,12 +78,18 @@ class FinanceStore extends ChangeNotifier {
     return null;
   }
 
+  /// Último mes que se puede ver o crear: el siguiente al actual. Las finanzas no se
+  /// proyectan más lejos porque el salario cambia (incrementos anuales, cambios de cargo).
+  static String get maxMonth => MonthId.add(MonthId.now(), 1);
+
   Future<void> load() async {
     await db.open();
+    await db.deleteFutureCopies(maxMonth);
     await openMonth(MonthId.now());
   }
 
   Future<void> openMonth(String id) async {
+    if (id.compareTo(maxMonth) > 0) id = maxMonth;
     month = id;
     loading = true;
     notifyListeners();
@@ -194,7 +200,8 @@ class FinanceStore extends ChangeNotifier {
 
   /// Cuántos meses siguientes tienen este mismo renglón (para ofrecer cambiarlos también).
   Future<int> laterMonthsWith(Entry original) => recurring.contains(original.module)
-      ? db.countForward(original.module, original.concept, month, fundId: original.module == FinanceModule.saving ? original.fundId : null)
+      ? db.countForward(original.module, original.concept, month, maxMonth,
+          fundId: original.module == FinanceModule.saving ? original.fundId : null)
       : Future.value(0);
 
   /// Guarda el cambio de un renglón fijo y lo aplica también a los meses siguientes.
@@ -203,6 +210,7 @@ class FinanceStore extends ChangeNotifier {
       original.module,
       original.concept,
       month,
+      maxMonth,
       {
         'concept': updated.concept,
         'amount': updated.amount,
@@ -255,7 +263,7 @@ class FinanceStore extends ChangeNotifier {
   /// Con [forward], el aporte se cambia también en los meses siguientes.
   Future<void> setFundMove(SavingsFund fund, FinanceModule kind, double amount, {String note = '', bool forward = false}) async {
     if (forward && kind == FinanceModule.saving) {
-      await db.updateForward(kind, fund.name, month, {'amount': amount}, fundId: fund.id);
+      await db.updateForward(kind, fund.name, month, maxMonth, {'amount': amount}, fundId: fund.id);
     }
     if (!monthExists) await db.createMonth(month, healthPercent);
     final existing = entries.where((e) => e.module == kind && e.fundId == fund.id).toList();
@@ -291,6 +299,12 @@ class FinanceStore extends ChangeNotifier {
     final base = of(FinanceModule.income).where((e) => e.concept.toLowerCase() == name).firstOrNull;
     return base?.amount ?? summary.salaryIncome;
   }
+
+  /// Ingresos salariales actuales por concepto (los que pagan salud y pensión).
+  Map<String, double> get salaryItems => {
+        for (final e in of(FinanceModule.income))
+          if (e.appliesHealth) e.concept: e.amount,
+      };
 
   /// Ingresos salariales de cada mes registrado (para promediar el salario variable).
   Future<Map<String, double>> salaryByMonth() async {

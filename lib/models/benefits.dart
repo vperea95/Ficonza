@@ -3,6 +3,34 @@ import 'dart:math' as math;
 
 import 'finance.dart';
 
+/// Un ingreso salarial que cambió durante el año: antes de [since] se ganaba
+/// [previousAmount]; desde [since] (primer día del mes) se gana el valor actual.
+class IncomeChange {
+  const IncomeChange({required this.concept, required this.previousAmount, required this.since});
+
+  /// Concepto tal como está en el módulo Ingresos (por ejemplo, "Sueldo base").
+  final String concept;
+  final double previousAmount;
+  final DateTime since;
+
+  Map<String, Object?> toJson() => {
+        'concept': concept,
+        'previousAmount': previousAmount,
+        'since': since.toIso8601String().substring(0, 10),
+      };
+
+  static IncomeChange? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final since = DateTime.tryParse('${json['since']}');
+    if (since == null) return null;
+    return IncomeChange(
+      concept: '${json['concept'] ?? ''}',
+      previousAmount: (json['previousAmount'] as num?)?.toDouble() ?? 0,
+      since: DateTime(since.year, since.month, 1),
+    );
+  }
+}
+
 /// Datos laborales para calcular las prestaciones sociales (Colombia).
 class EmploymentInfo {
   const EmploymentInfo({
@@ -16,6 +44,7 @@ class EmploymentInfo {
     this.interestPaidUntil,
     this.vacationUntil,
     this.pendingVacationDays = 0,
+    this.incomeChanges = const [],
   });
 
   /// Valores legales de 2026 (Decreto de salario mínimo). Se pueden editar en la app.
@@ -43,6 +72,10 @@ class EmploymentInfo {
   /// Días de vacaciones que le quedaron pendientes a esa fecha.
   final double pendingVacationDays;
 
+  /// Cambios de salario o de otros ingresos salariales durante el año (por ejemplo,
+  /// aumento de sueldo desde julio). Sirven para reconstruir lo ganado mes a mes.
+  final List<IncomeChange> incomeChanges;
+
   EmploymentInfo copyWith({
     DateTime? hireDate,
     bool? integralSalary,
@@ -55,6 +88,7 @@ class EmploymentInfo {
     DateTime? vacationUntil,
     bool clearVacationUntil = false,
     double? pendingVacationDays,
+    List<IncomeChange>? incomeChanges,
   }) =>
       EmploymentInfo(
         hireDate: hireDate ?? this.hireDate,
@@ -67,6 +101,7 @@ class EmploymentInfo {
         interestPaidUntil: interestPaidUntil ?? this.interestPaidUntil,
         vacationUntil: clearVacationUntil ? null : (vacationUntil ?? this.vacationUntil),
         pendingVacationDays: pendingVacationDays ?? this.pendingVacationDays,
+        incomeChanges: incomeChanges ?? this.incomeChanges,
       );
 
   String encode() => jsonEncode({
@@ -80,6 +115,7 @@ class EmploymentInfo {
         'interestPaidUntil': _d(interestPaidUntil),
         'vacationUntil': _d(vacationUntil),
         'pendingVacationDays': pendingVacationDays,
+        'incomeChanges': [for (final c in incomeChanges) c.toJson()],
       });
 
   static EmploymentInfo? decode(String? raw) {
@@ -99,6 +135,10 @@ class EmploymentInfo {
         interestPaidUntil: _p(j['interestPaidUntil']),
         vacationUntil: _p(j['vacationUntil']),
         pendingVacationDays: (j['pendingVacationDays'] as num?)?.toDouble() ?? 0,
+        incomeChanges: [
+          for (final c in (j['incomeChanges'] as List? ?? const []))
+            if (IncomeChange.fromJson(c) case final change?) change,
+        ],
       );
     } catch (_) {
       return null;
@@ -162,11 +202,28 @@ class BenefitsCalculator {
 
   final EmploymentInfo info;
 
+  /// Ingreso salarial de un mes: el registrado en la app si existe; si no, los
+  /// ingresos salariales actuales ([currentItems], concepto -> valor) con el valor
+  /// anterior para los que cambiaron después de ese mes.
+  double salaryForMonth(String monthId, Map<String, double> salaryByMonth, Map<String, double> currentItems) {
+    final recorded = salaryByMonth[monthId];
+    if (recorded != null && recorded > 0) return recorded;
+    final month = DateTime(MonthId.year(monthId), MonthId.month(monthId));
+    var total = 0.0;
+    currentItems.forEach((concept, amount) {
+      final change = info.incomeChanges.where((c) => c.concept.toLowerCase() == concept.toLowerCase()).firstOrNull;
+      total += change != null && month.isBefore(change.since) ? change.previousAmount : amount;
+    });
+    return total;
+  }
+
   /// [salaryByMonth]: ingresos salariales de cada mes registrado ("AAAA-MM" -> valor).
+  /// [currentItems]: ingresos salariales actuales por concepto (para los meses sin registro).
   /// [basicSalary]: el sueldo básico (para vacaciones).
   List<BenefitResult> compute({
     required DateTime cut,
     required Map<String, double> salaryByMonth,
+    required Map<String, double> currentItems,
     required double currentSalary,
     required double basicSalary,
   }) {
@@ -175,13 +232,17 @@ class BenefitsCalculator {
       return next == null || next.isBefore(info.hireDate) ? info.hireDate : next;
     }
 
+    /// Promedio mensual del periodo (CST art. 253): cada mes con lo registrado o lo
+    /// reconstruido con los cambios de ingresos del año.
     double averageSalary(DateTime from) {
-      final fromId = MonthId.of(from.year, from.month);
+      final values = <double>[];
+      var id = MonthId.of(from.year, from.month);
       final toId = MonthId.of(cut.year, cut.month);
-      final values = [
-        for (final e in salaryByMonth.entries)
-          if (e.key.compareTo(fromId) >= 0 && e.key.compareTo(toId) <= 0 && e.value > 0) e.value,
-      ];
+      while (id.compareTo(toId) <= 0) {
+        final v = salaryForMonth(id, salaryByMonth, currentItems);
+        if (v > 0) values.add(v);
+        id = MonthId.add(id, 1);
+      }
       if (values.isEmpty) return currentSalary;
       return values.reduce((a, b) => a + b) / values.length;
     }

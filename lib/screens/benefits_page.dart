@@ -48,6 +48,7 @@ class BenefitsPage extends StatelessWidget {
         final results = BenefitsCalculator(info).compute(
           cut: cut,
           salaryByMonth: snap.data!,
+          currentItems: store.salaryItems,
           currentSalary: store.summary.salaryIncome,
           basicSalary: store.basicSalary,
         );
@@ -233,6 +234,8 @@ class _Detail extends StatelessWidget {
             s.periodFrom(local.formatMediumDate(r.from), r.days),
             if (r.kind == BenefitKind.vacation) s.vacationDaysAccrued(_one(r.vacationDays), _one(info.pendingVacationDays)),
             s.baseIs(Money.format(r.base), r.kind),
+            if (r.kind != BenefitKind.vacation && info.incomeChanges.isNotEmpty)
+              s.changesIncluded(info.incomeChanges.map((c) => '${c.concept} (${s.monthName(c.since.month)})').join(', ')),
             s.benefitFormula(r.kind),
             s.benefitPayment(r.kind),
           ];

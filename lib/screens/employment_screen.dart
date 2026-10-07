@@ -36,6 +36,9 @@ class _EmploymentScreenState extends State<EmploymentScreen> {
   );
   String? _error;
 
+  /// Cambios de ingresos salariales de este año (aumento de sueldo, bonificaciones…).
+  late final List<IncomeChange> _changes = List.of(_old?.incomeChanges ?? const []);
+
   final _today = DateTime.now();
 
   /// Quien gana hasta 2 SMMLV tiene derecho al auxilio de transporte.
@@ -94,9 +97,93 @@ class _EmploymentScreenState extends State<EmploymentScreen> {
       interestPaidUntil: _interest,
       vacationUntil: _vacation,
       pendingVacationDays: double.tryParse(_pendingDays.text.replaceAll(',', '.')) ?? 0,
+      incomeChanges: _changes,
     );
     await widget.store.saveEmployment(info);
     navigator.pop();
+  }
+
+  /// Agregar un cambio: concepto (de los ingresos salariales), valor anterior y desde qué mes.
+  Future<void> _addChange() async {
+    final s = S.of(context);
+    final concepts = widget.store.salaryItems.keys.toList();
+    if (concepts.isEmpty) return;
+    var concept = concepts.first;
+    var since = _today.month;
+    final previous = TextEditingController();
+    final result = await showDialog<IncomeChange>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialog) => AlertDialog(
+          title: Text(s.addChange),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonHideUnderline(
+                  child: InputDecorator(
+                    decoration: InputDecoration(labelText: s.concept, border: const OutlineInputBorder()),
+                    child: DropdownButton<String>(
+                      value: concept,
+                      isExpanded: true,
+                      isDense: true,
+                      items: [for (final c in concepts) DropdownMenuItem(value: c, child: Text(c))],
+                      onChanged: (v) => setDialog(() => concept = v ?? concept),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: previous,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [MoneyInputFormatter()],
+                  decoration: InputDecoration(
+                    labelText: s.previousValue,
+                    prefixText: '${Money.currency.symbol} ',
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonHideUnderline(
+                  child: InputDecorator(
+                    decoration: InputDecoration(labelText: s.currentValueSince, border: const OutlineInputBorder()),
+                    child: DropdownButton<int>(
+                      value: since,
+                      isExpanded: true,
+                      isDense: true,
+                      items: [
+                        for (var m = 1; m <= _today.month; m++)
+                          DropdownMenuItem(value: m, child: Text('${s.monthName(m)} ${_today.year}')),
+                      ],
+                      onChanged: (v) => setDialog(() => since = v ?? since),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: Text(s.cancel)),
+            FilledButton(
+              onPressed: () {
+                final value = Money.parse(previous.text);
+                if (value <= 0) return;
+                Navigator.pop(
+                  dialogContext,
+                  IncomeChange(concept: concept, previousAmount: value, since: DateTime(_today.year, since)),
+                );
+              },
+              child: Text(s.add),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (result == null) return;
+    setState(() {
+      _changes.removeWhere((c) => c.concept.toLowerCase() == result.concept.toLowerCase());
+      _changes.add(result);
+    });
   }
 
   @override
@@ -251,6 +338,46 @@ class _EmploymentScreenState extends State<EmploymentScreen> {
                   suffixText: s.daysSuffix,
                   border: const OutlineInputBorder(),
                 ),
+              ),
+            ),
+          ),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.trending_up_rounded, color: theme.colorScheme.primary),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(s.changesTitle, style: const TextStyle(fontWeight: FontWeight.w600)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(s.changesBody, style: theme.textTheme.bodySmall),
+                  for (final c in _changes)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(c.concept),
+                      subtitle: Text(s.changeBefore(Money.format(c.previousAmount), s.monthName(c.since.month))),
+                      trailing: IconButton(
+                        tooltip: s.delete,
+                        icon: const Icon(Icons.delete_outline_rounded),
+                        onPressed: () => setState(() => _changes.remove(c)),
+                      ),
+                    ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: widget.store.salaryItems.isEmpty ? null : _addChange,
+                      icon: const Icon(Icons.add_rounded),
+                      label: Text(s.addChange),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

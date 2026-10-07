@@ -129,6 +129,18 @@ class ModulePage extends StatelessWidget {
           ),
           body: CustomScrollView(
             slivers: [
+              // Enero: el salario suele cambiar con el incremento anual.
+              if (module == FinanceModule.income && MonthId.month(store.month) == 1)
+                SliverToBoxAdapter(
+                  child: Card(
+                    margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                    child: ListTile(
+                      leading: Icon(Icons.celebration_rounded, color: Theme.of(context).colorScheme.primary),
+                      title: Text(s.newYearTitle(MonthId.year(store.month))),
+                      subtitle: Text(s.newYearBody),
+                    ),
+                  ),
+                ),
               // Ingresos: invita a calcular las prestaciones si faltan los datos laborales.
               if (module == FinanceModule.income && store.employment == null)
                 SliverToBoxAdapter(

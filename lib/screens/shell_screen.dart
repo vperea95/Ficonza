@@ -114,7 +114,12 @@ class _ShellScreenState extends State<ShellScreen> {
               ],
               bottom: PreferredSize(
                 preferredSize: const Size.fromHeight(48),
-                child: MonthSelector(month: store.month, onChanged: store.openMonth, color: Colors.white),
+                child: MonthSelector(
+                  month: store.month,
+                  onChanged: store.openMonth,
+                  maxMonth: FinanceStore.maxMonth,
+                  color: Colors.white,
+                ),
               ),
             ),
             drawer: _ModulesDrawer(
@@ -324,7 +329,7 @@ class _ModulesDrawer extends StatelessWidget {
                 showAboutDialog(
                   context: context,
                   applicationName: 'Ficonza',
-                  applicationVersion: '0.6.0',
+                  applicationVersion: '0.7.0',
                   applicationIcon: const AppLogo(size: 56),
                   applicationLegalese: s.legalese,
                   children: [
@@ -336,7 +341,7 @@ class _ModulesDrawer extends StatelessWidget {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
-              child: Text('Ficonza 0.6.0', style: muted),
+              child: Text('Ficonza 0.7.0', style: muted),
             ),
           ],
         ),

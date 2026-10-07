@@ -421,6 +421,35 @@ class S {
   String get legalValuesHint => _t('Salario mínimo 2026', '2026 minimum wage');
   String get minimumWage => _t('Salario mínimo (SMMLV)', 'Minimum wage');
 
+  // ---------- Cambios de ingresos durante el año ----------
+  String monthName(int m) => (isSpanish ? _monthsEs : _monthsEn)[m - 1];
+  String changesQuestion(int year) =>
+      _t('¿En $year cambió tu sueldo o alguno de tus ingresos?', 'Did your salary or any income change in $year?');
+  String get changesQuestionBody => _t(
+        'Por ejemplo, un aumento de sueldo, o una bonificación o un stand-by que ahora te pagan por otro valor. Así calculamos lo que de verdad ganaste en el año.',
+        'For example, a raise, or a bonus or stand-by now paid at a different amount. This way we calculate what you really earned this year.',
+      );
+  String get changesTitle => _t('Cambios de ingresos este año', 'Income changes this year');
+  String get changesBody => _t(
+        'Marca los ingresos que cambiaron, escribe cuánto ganabas antes y desde qué mes ganas el valor actual. Se usan para promediar tus prestaciones.',
+        'Mark the income that changed, enter what you earned before and since which month you earn the current amount. They are used to average your benefits.',
+      );
+  String currentValueIs(String v) => _t('Valor actual: $v', 'Current amount: $v');
+  String get previousValue => _t('Valor anterior', 'Previous amount');
+  String get currentValueSince => _t('Ganas el valor actual desde', 'You earn the current amount since');
+  String changeSummary(String before, String now, String month) =>
+      _t('$before → $now desde $month', '$before → $now since $month');
+  String changeBefore(String before, String month) =>
+      _t('Antes $before; el valor actual desde $month', 'Before $before; current amount since $month');
+  String get addChange => _t('Agregar un cambio', 'Add a change');
+  String changesIncluded(String list) =>
+      _t('El promedio incluye los cambios de: $list.', 'The average includes the changes in: $list.');
+  String newYearTitle(int year) => _t('¡Feliz $year! ¿Te subieron el sueldo?', 'Happy $year! Did you get a raise?');
+  String get newYearBody => _t(
+        'Con el incremento anual o un cambio de cargo tus ingresos pueden cambiar. Revísalos y edítalos aquí.',
+        'With the yearly increase or a new position your income may change. Check and edit it here.',
+      );
+
   // ---------- Bienvenida (configuración inicial en carrusel) ----------
   String get welcomeTitle => _t('Bienvenido a Ficonza', 'Welcome to Ficonza');
   String get welcomeBody => _t(

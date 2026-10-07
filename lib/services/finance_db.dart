@@ -169,23 +169,51 @@ class FinanceDb {
 
   /// Renglones de los meses posteriores a [month] con el mismo módulo y concepto
   /// (o el mismo ahorro, si [fundId] no es null).
-  String _forwardWhere(int? fundId) =>
-      fundId != null ? 'module = ? AND fund_id = ? AND month > ?' : 'module = ? AND concept = ? AND month > ?';
+  /// Solo hasta [maxMonth]: el salario puede cambiar año a año, no se proyecta lejos.
+  String _forwardWhere(int? fundId) => fundId != null
+      ? 'module = ? AND fund_id = ? AND month > ? AND month <= ?'
+      : 'module = ? AND concept = ? AND month > ? AND month <= ?';
 
-  Future<int> countForward(FinanceModule module, String concept, String month, {int? fundId}) async {
+  Future<int> countForward(FinanceModule module, String concept, String month, String maxMonth, {int? fundId}) async {
     final rows = await db.query(
       'entries',
       columns: ['id'],
       where: _forwardWhere(fundId),
-      whereArgs: [module.name, fundId ?? concept, month],
+      whereArgs: [module.name, fundId ?? concept, month, maxMonth],
     );
     return rows.length;
   }
 
-  /// Aplica el cambio de un renglón fijo a los meses siguientes.
-  Future<void> updateForward(FinanceModule module, String oldConcept, String month, Map<String, Object?> values,
-      {int? fundId}) =>
-      db.update('entries', values, where: _forwardWhere(fundId), whereArgs: [module.name, fundId ?? oldConcept, month]);
+  /// Aplica el cambio de un renglón fijo a los meses siguientes (hasta [maxMonth]).
+  Future<void> updateForward(FinanceModule module, String oldConcept, String month, String maxMonth,
+          Map<String, Object?> values, {int? fundId}) =>
+      db.update('entries', values,
+          where: _forwardWhere(fundId), whereArgs: [module.name, fundId ?? oldConcept, month, maxMonth]);
+
+  /// Borra los meses posteriores a [maxMonth] que solo tienen conceptos copiados
+  /// (se crearon al navegar). Si alguno tiene gastos variables, ingresos ocasionales
+  /// o retiros escritos por el usuario, se deja. Devuelve cuántos meses borró.
+  Future<int> deleteFutureCopies(String maxMonth) async {
+    final future = await db.query('months', columns: ['id'], where: 'id > ?', whereArgs: [maxMonth]);
+    var deleted = 0;
+    for (final row in future) {
+      final id = '${row['id']}';
+      final own = await db.query(
+        'entries',
+        columns: ['id'],
+        where: "month = ? AND module IN ('occasional', 'variable', 'withdrawal')",
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (own.isNotEmpty) continue;
+      await db.transaction((txn) async {
+        await txn.delete('entries', where: 'month = ?', whereArgs: [id]);
+        await txn.delete('months', where: 'id = ?', whereArgs: [id]);
+      });
+      deleted++;
+    }
+    return deleted;
+  }
 
   Future<void> reorder(List<Entry> ordered) async {
     final batch = db.batch();
